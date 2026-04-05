@@ -1,0 +1,15 @@
+{
+  "name": "listenwithme",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:web": "npm run dev --workspace @listenwithme/web",
+    "dev:web:clean": "npm run dev:clean --workspace @listenwithme/web",
+    "dev:server": "npm run dev --workspace @listenwithme/server",
+    "build:web": "npm run build --workspace @listenwithme/web",
+    "build:server": "npm run build --workspace @listenwithme/server",
+    "lint:web": "npm run lint --workspace @listenwithme/web"
+  }
+}
