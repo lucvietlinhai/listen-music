@@ -2,8 +2,10 @@
 
 import { FormEvent, RefObject, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { io, Socket } from "socket.io-client";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ErrorState } from "@/components/common/error-state";
+import { getGuestToken } from "@/lib/api";
 
 type RoomPageProps = {
   params: { id: string };
@@ -28,6 +30,7 @@ type ChatMessage = {
   type: "text" | "system";
   user?: string;
   content: string;
+  createdAt?: number;
 };
 
 type ReactionItem = {
@@ -40,6 +43,14 @@ type ToastItem = {
   id: string;
   message: string;
   icon: string;
+};
+
+type PlaybackState = {
+  videoId: string;
+  currentTime: number;
+  isPlaying: boolean;
+  updatedAt: number;
+  hostId: string;
 };
 
 const searchPool = [
@@ -112,26 +123,53 @@ const initialMessages: ChatMessage[] = [
 
 const emojis = ["❤️", "🔥", "👏", "🎧", "🥹", "✨"];
 
+const decodeJwtPayload = (token: string): { userId?: string } | null => {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const json = atob(padded);
+    return JSON.parse(json) as { userId?: string };
+  } catch {
+    return null;
+  }
+};
+
 export default function RoomPage({ params }: RoomPageProps) {
   const { user, requestLogin } = useAuth();
 
   const [queue, setQueue] = useState<QueueItem[]>(initialQueue);
   const [search, setSearch] = useState("");
   const [sheet, setSheet] = useState<"queue" | "members" | null>(null);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(initialMessages);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [reactions, setReactions] = useState<ReactionItem[]>([]);
-  const [votes, setVotes] = useState(1);
+  const [votes, setVotes] = useState(0);
   const [hasVoted, setHasVoted] = useState(false);
   const [showVoiceOverlay, setShowVoiceOverlay] = useState(false);
   const [typedText, setTypedText] = useState("");
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [hasError, setHasError] = useState(false);
+  const [onlineCount, setOnlineCount] = useState(members.length);
+  const [isSocketConnected, setIsSocketConnected] = useState(false);
+  const [playback, setPlayback] = useState<PlaybackState>({
+    videoId: "hLQl3WQQoQ0",
+    currentTime: 84,
+    isPlaying: false,
+    updatedAt: Date.now(),
+    hostId: ""
+  });
+  const [currentUserId, setCurrentUserId] = useState("");
+  const [displayTime, setDisplayTime] = useState(84);
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const socketRef = useRef<Socket | null>(null);
+  const displayTimeRef = useRef(84);
   const fullVoiceText = "Một lời nhắn ẩn danh: Chúc bạn tối nay thật bình yên và ngủ thật ngon.";
-  const totalMembers = members.length;
+  const totalMembers = Math.max(onlineCount, 1);
   const role = user ? "host" : "guest";
+  const canControlPlayer = playback.hostId === currentUserId || !playback.hostId;
 
   const filteredResults = useMemo(() => {
     if (!search.trim()) return searchPool;
@@ -147,11 +185,153 @@ export default function RoomPage({ params }: RoomPageProps) {
   }, [chatMessages]);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("error") === "1") {
+    displayTimeRef.current = displayTime;
+  }, [displayTime]);
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search);
+    if (query.get("error") === "1") {
       setHasError(true);
     }
   }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const socketUrl = process.env.NEXT_PUBLIC_SOCKET_URL ?? "http://localhost:4000";
+
+    const setup = async () => {
+      try {
+        const token = await getGuestToken();
+        if (!mounted) return;
+        const decoded = decodeJwtPayload(token);
+        if (decoded?.userId) {
+          setCurrentUserId(decoded.userId);
+        }
+
+        const socket = io(socketUrl, {
+          auth: { token },
+          transports: ["websocket"]
+        });
+        socketRef.current = socket;
+
+        socket.on("connect", () => {
+          if (!mounted) return;
+          setIsSocketConnected(true);
+          socket.emit("room:join", { roomId: params.id });
+        });
+
+        socket.on("disconnect", () => {
+          if (!mounted) return;
+          setIsSocketConnected(false);
+        });
+
+        socket.on(
+          "room:state",
+          (payload: {
+            members: number;
+            state: PlaybackState;
+            queue: QueueItem[];
+            chat: Array<{ id: string; type: "text"; user: string; content: string; createdAt: number }>;
+            vote: { count: number; voters: string[] };
+          }) => {
+            if (!mounted) return;
+            setOnlineCount(payload.members);
+            setPlayback(payload.state);
+            setDisplayTime(payload.state.currentTime);
+            setQueue(payload.queue);
+            setChatMessages(payload.chat);
+            setVotes(payload.vote.count);
+            setHasVoted(payload.vote.voters.includes(decoded?.userId ?? ""));
+          }
+        );
+
+        socket.on("room:member_joined", (payload: { members: number }) => {
+          if (!mounted) return;
+          setOnlineCount(payload.members);
+        });
+
+        socket.on("room:member_left", (payload: { members: number }) => {
+          if (!mounted) return;
+          setOnlineCount(payload.members);
+        });
+
+        socket.on("player:state", (payload: { state: PlaybackState }) => {
+          if (!mounted) return;
+          setPlayback(payload.state);
+          setDisplayTime(payload.state.currentTime);
+        });
+
+        socket.on("player:heartbeat", (payload: { currentTime: number; isPlaying: boolean }) => {
+          if (!mounted) return;
+          const diff = Math.abs(displayTimeRef.current - payload.currentTime);
+          setPlayback((prev) => ({
+            ...prev,
+            currentTime: diff > 2 ? payload.currentTime : prev.currentTime,
+            isPlaying: payload.isPlaying,
+            updatedAt: Date.now()
+          }));
+          if (diff > 2) {
+            setDisplayTime(payload.currentTime);
+          }
+        });
+
+        socket.on("queue:updated", (payload: { queue: QueueItem[] }) => {
+          if (!mounted) return;
+          setQueue(payload.queue);
+        });
+
+        socket.on("chat:message", (payload: { message: ChatMessage }) => {
+          if (!mounted) return;
+          setChatMessages((prev) => [...prev, payload.message]);
+        });
+
+        socket.on("reaction:added", (payload: { emoji: string; id: string }) => {
+          if (!mounted) return;
+          const left = Math.floor(Math.random() * 85);
+          setReactions((prev) => [...prev, { id: payload.id, emoji: payload.emoji, left }]);
+          setTimeout(() => {
+            setReactions((prev) => prev.filter((item) => item.id !== payload.id));
+          }, 1800);
+        });
+
+        socket.on("vote:state", (payload: { count: number; voters: string[]; members: number }) => {
+          if (!mounted) return;
+          setVotes(payload.count);
+          setOnlineCount(payload.members);
+          setHasVoted(payload.voters.includes(decoded?.userId ?? ""));
+        });
+
+        socket.on("auth:error", (payload: { code: string }) => {
+          if (!mounted) return;
+          if (payload.code === "HOST_ONLY_CONTROL") {
+            pushToast("Chỉ host mới có quyền điều khiển player", "⛔");
+          }
+        });
+
+        socket.on("room:host_changed", (payload: { hostId: string }) => {
+          if (!mounted) return;
+          setPlayback((prev) => ({
+            ...prev,
+            hostId: payload.hostId
+          }));
+          pushToast("Host đã thay đổi trong phòng", "👑");
+        });
+      } catch {
+        setIsSocketConnected(false);
+      }
+    };
+
+    void setup();
+
+    return () => {
+      mounted = false;
+      if (socketRef.current) {
+        socketRef.current.emit("room:leave");
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+    };
+  }, [params.id]);
 
   useEffect(() => {
     if (!showVoiceOverlay) {
@@ -176,6 +356,14 @@ export default function RoomPage({ params }: RoomPageProps) {
     };
   }, [showVoiceOverlay]);
 
+  useEffect(() => {
+    if (!playback.isPlaying) return;
+    const timer = setInterval(() => {
+      setDisplayTime((prev) => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [playback.isPlaying]);
+
   const pushToast = (message: string, icon = "ℹ️") => {
     const id = `${Date.now()}-${Math.random()}`;
     setToasts((prev) => [...prev, { id, message, icon }]);
@@ -192,6 +380,27 @@ export default function RoomPage({ params }: RoomPageProps) {
     action();
   };
 
+  const formatSeconds = (seconds: number) => {
+    const safe = Math.max(0, Math.floor(seconds));
+    const min = Math.floor(safe / 60)
+      .toString()
+      .padStart(2, "0");
+    const sec = (safe % 60).toString().padStart(2, "0");
+    return `${min}:${sec}`;
+  };
+
+  const emitPlayerEvent = (
+    event: "player:play" | "player:pause" | "player:seek" | "player:next",
+    payload?: Record<string, unknown>
+  ) => {
+    const socket = socketRef.current;
+    if (!socket) {
+      pushToast("Socket chưa kết nối", "⚠️");
+      return;
+    }
+    socket.emit(event, { roomId: params.id, ...payload });
+  };
+
   const handleCopyLink = async () => {
     const roomLink = `${window.location.origin}/room/${params.id}`;
     await navigator.clipboard.writeText(roomLink);
@@ -200,14 +409,24 @@ export default function RoomPage({ params }: RoomPageProps) {
 
   const handleAddSong = (item: QueueItem) => {
     requireLogin("Đăng nhập để thêm bài vào hàng đợi.", () => {
-      setQueue((prev) => [...prev, { ...item, id: `${item.id}-${Date.now()}` }]);
+      const nextItem = { ...item, id: `${item.id}-${Date.now()}` };
+      socketRef.current?.emit("queue:add", {
+        roomId: params.id,
+        item: {
+          id: nextItem.id,
+          videoId: nextItem.id,
+          title: nextItem.title,
+          channel: nextItem.channel,
+          thumbnail: nextItem.thumbnail
+        }
+      });
       pushToast(`Đã thêm "${item.title}" vào hàng đợi`, "🎵");
     });
   };
 
   const handleRemoveSong = (id: string) => {
-    setQueue((prev) => prev.filter((item) => item.id !== id));
-    pushToast("Đã xóa bài khỏi hàng đợi", "🗑️");
+    socketRef.current?.emit("queue:remove", { roomId: params.id, id });
+    pushToast("Đã gửi yêu cầu xóa bài khỏi hàng đợi", "🗑️");
   };
 
   const handleSendChat = (event: FormEvent) => {
@@ -237,8 +456,30 @@ export default function RoomPage({ params }: RoomPageProps) {
   const handleVote = () => {
     if (hasVoted) return;
     requireLogin("Đăng nhập để bỏ phiếu skip bài hát.", () => {
-      setHasVoted(true);
-      setVotes((prev) => prev + 1);
+      socketRef.current?.emit("vote:cast", { roomId: params.id });
+    });
+  };
+
+  const handleSendChatSocket = (event: FormEvent) => {
+    event.preventDefault();
+    requireLogin("Đăng nhập để gửi tin nhắn trong phòng.", () => {
+      const trimmed = chatInput.trim();
+      if (!trimmed) return;
+      socketRef.current?.emit("chat:send", { roomId: params.id, content: trimmed });
+      setChatInput("");
+    });
+  };
+
+  const handleReactionSocket = (emoji: string) => {
+    requireLogin("Đăng nhập để thả cảm xúc cùng mọi người.", () => {
+      socketRef.current?.emit("reaction:send", { roomId: params.id, emoji });
+    });
+  };
+
+  const handleVoteSocket = () => {
+    if (hasVoted) return;
+    requireLogin("Đăng nhập để bỏ phiếu skip bài hát.", () => {
+      socketRef.current?.emit("vote:cast", { roomId: params.id });
     });
   };
 
@@ -255,7 +496,7 @@ export default function RoomPage({ params }: RoomPageProps) {
             </div>
             <div className="flex items-center gap-2">
               <span className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-muted">
-                {members.length} trực tuyến
+                {onlineCount} trực tuyến
               </span>
               <button
                 onClick={handleCopyLink}
@@ -284,149 +525,181 @@ export default function RoomPage({ params }: RoomPageProps) {
 
           {!hasError ? (
             <div className="grid gap-4 lg:grid-cols-12">
-          <aside className="hidden rounded-2xl border border-line bg-card p-4 lg:col-span-3 lg:block">
-            <QueuePanel queue={queue} onRemove={handleRemoveSong} />
-            <div className="my-4 border-t border-line" />
-            <MembersPanel members={members} />
-          </aside>
-
-          <section className="space-y-4 md:col-span-1 lg:col-span-6">
-            <article className="rounded-2xl border border-line bg-card p-4 sm:p-5">
-              <div className="relative overflow-hidden rounded-xl">
-                <img
-                  src="https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=1200&q=80"
-                  alt="Ảnh bài hát đang phát"
-                  className="h-56 w-full object-cover sm:h-72"
+              <aside className="hidden rounded-2xl border border-line bg-card p-4 lg:col-span-3 lg:block">
+                <SearchPanel
+                  search={search}
+                  setSearch={setSearch}
+                  results={filteredResults}
+                  onAdd={handleAddSong}
                 />
-              </div>
-              <h2 className="mt-4 text-2xl font-extrabold">Nơi Này Có Anh</h2>
-              <p className="mt-1 text-sm text-muted">Sơn Tùng M-TP</p>
+                <div className="my-4 border-t border-line" />
+                <QueuePanel queue={queue} onRemove={handleRemoveSong} />
+                <div className="my-4 border-t border-line" />
+                <MembersPanel members={members} />
+              </aside>
 
-              <div className="mt-4 h-2 w-full rounded-full bg-surface">
-                <div className="h-2 w-1/3 rounded-full bg-accent" />
-              </div>
-              <div className="mt-2 flex justify-between text-xs text-muted">
-                <span>01:24</span>
-                <span>04:50</span>
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button className="rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium">
-                  Pause
-                </button>
-                <button className="rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium">
-                  Seek +10s
-                </button>
-                <button className="rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium">
-                  Next
-                </button>
-                <button
-                  onClick={() => setShowVoiceOverlay(true)}
-                  className="rounded-lg bg-accent-soft px-3 py-2 text-sm font-semibold text-accent"
-                >
-                  Demo lời nhắn AI
-                </button>
-              </div>
-
-              <div className="relative mt-5 rounded-xl border border-line bg-surface p-3">
-                <p className="text-sm font-semibold">Thả cảm xúc</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {emojis.map((emoji) => (
-                    <button
-                      key={emoji}
-                      onClick={() => handleReaction(emoji)}
-                      aria-label={`Thả cảm xúc ${emoji}`}
-                      className="rounded-lg border border-line bg-card px-3 py-2 text-lg"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-                <div className="pointer-events-none absolute inset-x-0 bottom-2 h-24 overflow-hidden">
-                  {reactions.map((item) => (
-                    <span
-                      key={item.id}
-                      className="reaction-bubble"
-                      style={{ left: `${item.left}%` }}
-                    >
-                      {item.emoji}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-4 rounded-xl border border-line bg-surface p-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold">Bỏ phiếu skip</p>
-                  <p className="text-xs text-muted">
-                    {votes}/{totalMembers}
+              <section className="space-y-4 md:col-span-1 lg:col-span-6">
+                <article className="rounded-2xl border border-line bg-card p-4 sm:p-5">
+                  <div className="relative overflow-hidden rounded-xl">
+                    <img
+                      src="https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=1200&q=80"
+                      alt="Ảnh bài hát đang phát"
+                      className="h-56 w-full object-cover sm:h-72"
+                    />
+                  </div>
+                  <h2 className="mt-4 text-2xl font-extrabold">Nơi Này Có Anh</h2>
+                  <p className="mt-1 text-sm text-muted">Sơn Tùng M-TP</p>
+                  <p className="mt-1 text-xs text-muted">
+                    Realtime: {isSocketConnected ? "Đã kết nối" : "Mất kết nối"}
                   </p>
-                </div>
-                <div className="mt-2 h-2 w-full rounded-full bg-card">
-                  <div
-                    className="h-2 rounded-full bg-accent"
-                    style={{ width: `${(votes / totalMembers) * 100}%` }}
+                  <p className="mt-1 text-xs text-muted">
+                    Quyền điều khiển: {canControlPlayer ? "Host" : "Chỉ host mới điều khiển"}
+                  </p>
+
+                  <div className="mt-4 h-2 w-full rounded-full bg-surface">
+                    <div
+                      className="h-2 rounded-full bg-accent"
+                      style={{ width: `${Math.min((displayTime / 290) * 100, 100)}%` }}
+                    />
+                  </div>
+                  <div className="mt-2 flex justify-between text-xs text-muted">
+                    <span>{formatSeconds(displayTime)}</span>
+                    <span>04:50</span>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      onClick={() =>
+                        emitPlayerEvent(playback.isPlaying ? "player:pause" : "player:play", {
+                          currentTime: displayTime
+                        })
+                      }
+                      disabled={!canControlPlayer}
+                      className="rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium disabled:opacity-50"
+                    >
+                      {playback.isPlaying ? "Pause" : "Play"}
+                    </button>
+                    <button
+                      onClick={() =>
+                        emitPlayerEvent("player:seek", {
+                          currentTime: displayTime + 10
+                        })
+                      }
+                      disabled={!canControlPlayer}
+                      className="rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium disabled:opacity-50"
+                    >
+                      Seek +10s
+                    </button>
+                    <button
+                      onClick={() => emitPlayerEvent("player:next")}
+                      disabled={!canControlPlayer}
+                      className="rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                    <button
+                      onClick={() => setShowVoiceOverlay(true)}
+                      className="rounded-lg bg-accent-soft px-3 py-2 text-sm font-semibold text-accent"
+                    >
+                      Demo lời nhắn AI
+                    </button>
+                  </div>
+
+                  <div className="relative mt-5 rounded-xl border border-line bg-surface p-3">
+                    <p className="text-sm font-semibold">Thả cảm xúc</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {emojis.map((emoji) => (
+                        <button
+                          key={emoji}
+                          onClick={() => handleReactionSocket(emoji)}
+                          aria-label={`Thả cảm xúc ${emoji}`}
+                          className="rounded-lg border border-line bg-card px-3 py-2 text-lg"
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="pointer-events-none absolute inset-x-0 bottom-2 h-24 overflow-hidden">
+                      {reactions.map((item) => (
+                        <span key={item.id} className="reaction-bubble" style={{ left: `${item.left}%` }}>
+                          {item.emoji}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 rounded-xl border border-line bg-surface p-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold">Bỏ phiếu skip</p>
+                      <p className="text-xs text-muted">
+                        {votes}/{totalMembers}
+                      </p>
+                    </div>
+                    <div className="mt-2 h-2 w-full rounded-full bg-card">
+                      <div
+                        className="h-2 rounded-full bg-accent"
+                        style={{ width: `${(votes / totalMembers) * 100}%` }}
+                      />
+                    </div>
+                    <button
+                      onClick={handleVoteSocket}
+                      disabled={hasVoted}
+                      aria-label="Bỏ phiếu skip bài hát"
+                      className="mt-3 rounded-lg bg-accent px-3 py-2 text-sm font-bold text-slate-950 disabled:opacity-50"
+                    >
+                      {hasVoted ? "Bạn đã vote" : "Bỏ phiếu skip"}
+                    </button>
+                  </div>
+                </article>
+
+                <article className="rounded-2xl border border-line bg-card p-4 lg:hidden">
+                  <div className="mb-3 flex gap-2">
+                    <button
+                      onClick={() => setSheet("queue")}
+                      className="rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+                    >
+                      Mở Queue
+                    </button>
+                    <button
+                      onClick={() => setSheet("members")}
+                      className="rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+                    >
+                      Mở Thành viên
+                    </button>
+                  </div>
+                  <SearchPanel
+                    search={search}
+                    setSearch={setSearch}
+                    results={filteredResults}
+                    onAdd={handleAddSong}
                   />
-                </div>
-                <button
-                  onClick={handleVote}
-                  disabled={hasVoted}
-                  aria-label="Bỏ phiếu skip bài hát"
-                  className="mt-3 rounded-lg bg-accent px-3 py-2 text-sm font-bold text-slate-950 disabled:opacity-50"
-                >
-                  {hasVoted ? "Bạn đã vote" : "Bỏ phiếu skip"}
-                </button>
-              </div>
-            </article>
+                </article>
+              </section>
 
-            <article className="rounded-2xl border border-line bg-card p-4 lg:hidden">
-              <div className="mb-3 flex gap-2">
-                <button
-                  onClick={() => setSheet("queue")}
-                  className="rounded-lg border border-line bg-surface px-3 py-2 text-sm"
-                >
-                  Mở Queue
-                </button>
-                <button
-                  onClick={() => setSheet("members")}
-                  className="rounded-lg border border-line bg-surface px-3 py-2 text-sm"
-                >
-                  Mở Thành viên
-                </button>
-              </div>
-              <SearchPanel
-                search={search}
-                setSearch={setSearch}
-                results={filteredResults}
-                onAdd={handleAddSong}
-              />
-            </article>
-          </section>
-
-          <aside className="rounded-2xl border border-line bg-card p-4 md:col-span-1 lg:col-span-3">
-            {!user ? (
-              <div className="mb-3 rounded-lg border border-accent/40 bg-accent-soft/20 p-3 text-sm">
-                <p className="font-semibold text-accent">
-                  Đang xem với tư cách khách - Đăng nhập để tham gia
-                </p>
-                <button
-                  onClick={() =>
-                    requestLogin({ message: "Đăng nhập để gửi tin nhắn và tương tác trong phòng." })
-                  }
-                  className="mt-2 rounded-md border border-line bg-surface px-3 py-2 text-xs font-semibold"
-                >
-                  Đăng nhập ngay
-                </button>
-              </div>
-            ) : null}
-            <ChatPanel
-              messages={chatMessages}
-              input={chatInput}
-              onChangeInput={setChatInput}
-              onSubmit={handleSendChat}
-              endRef={chatEndRef}
-            />
-          </aside>
+              <aside className="rounded-2xl border border-line bg-card p-4 md:col-span-1 lg:col-span-3">
+                {!user ? (
+                  <div className="mb-3 rounded-lg border border-accent/40 bg-accent-soft/20 p-3 text-sm">
+                    <p className="font-semibold text-accent">
+                      Đang xem với tư cách khách - Đăng nhập để tham gia
+                    </p>
+                    <button
+                      onClick={() =>
+                        requestLogin({ message: "Đăng nhập để gửi tin nhắn và tương tác trong phòng." })
+                      }
+                      className="mt-2 rounded-md border border-line bg-surface px-3 py-2 text-xs font-semibold"
+                    >
+                      Đăng nhập ngay
+                    </button>
+                  </div>
+                ) : null}
+                <ChatPanel
+                  messages={chatMessages}
+                  input={chatInput}
+                  onChangeInput={setChatInput}
+                  onSubmit={handleSendChatSocket}
+                  endRef={chatEndRef}
+                />
+              </aside>
             </div>
           ) : null}
         </section>
@@ -518,10 +791,7 @@ function SearchPanel({
       />
       <div className="mt-3 space-y-2">
         {results.map((item) => (
-          <div
-            key={item.id}
-            className="flex items-center gap-3 rounded-lg border border-line bg-surface p-2"
-          >
+          <div key={item.id} className="flex items-center gap-3 rounded-lg border border-line bg-surface p-2">
             <img src={item.thumbnail} alt={item.title} className="h-12 w-16 rounded object-cover" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">{item.title}</p>
@@ -582,10 +852,7 @@ function MembersPanel({ members }: { members: Member[] }) {
       <h3 className="text-lg font-bold">Thành viên</h3>
       <div className="mt-3 space-y-2">
         {members.map((member) => (
-          <div
-            key={member.id}
-            className="flex items-center justify-between rounded-lg border border-line bg-surface p-2"
-          >
+          <div key={member.id} className="flex items-center justify-between rounded-lg border border-line bg-surface p-2">
             <div className="flex items-center gap-2">
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-card text-sm font-bold">
                 {member.avatar}

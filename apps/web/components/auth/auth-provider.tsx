@@ -1,6 +1,8 @@
 "use client";
 
-import { createContext, ReactNode, useContext, useMemo, useRef, useState } from "react";
+import { CredentialResponse, GoogleLogin } from "@react-oauth/google";
+import { createContext, ReactNode, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { ApiAuthUser, clearAuthSession, getStoredAuthUser, loginWithGoogle } from "@/lib/api";
 
 export type AuthUser = {
   name: string;
@@ -19,27 +21,38 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const GOOGLE_ENABLED = Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
 
-const demoUser: AuthUser = {
-  name: "Nguyễn Minh Huy",
-  email: "minhhuy.demo@gmail.com",
-  avatar: "MH"
-};
+const toAuthUser = (value: ApiAuthUser): AuthUser => ({
+  name: value.name,
+  email: value.email ?? "",
+  avatar: value.name.slice(0, 2).toUpperCase()
+});
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
-  const [loginMessage, setLoginMessage] = useState("Đăng nhập Google để tiếp tục.");
+  const [loginMessage, setLoginMessage] = useState("Dang nhap Google de tiep tuc.");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loginError, setLoginError] = useState("");
   const pendingActionRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    const stored = getStoredAuthUser();
+    if (stored && !stored.isGuest) {
+      setUser(toAuthUser(stored));
+    }
+  }, []);
 
   const requestLogin = (request: LoginRequest, onSuccess?: () => void) => {
     setLoginMessage(request.message);
+    setLoginError("");
     pendingActionRef.current = onSuccess ?? null;
     setModalOpen(true);
   };
 
-  const login = () => {
-    setUser(demoUser);
+  const loginSuccess = (authUser: AuthUser) => {
+    setUser(authUser);
     setModalOpen(false);
     if (pendingActionRef.current) {
       pendingActionRef.current();
@@ -47,7 +60,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const onGoogleCredential = async (credentialResponse: CredentialResponse) => {
+    const idToken = credentialResponse.credential;
+    if (!idToken) {
+      setLoginError("Khong lay duoc token Google.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setLoginError("");
+    try {
+      const result = await loginWithGoogle(idToken);
+      if (!result.user || result.user.isGuest) {
+        throw new Error("Tai khoan khong hop le.");
+      }
+      loginSuccess(toAuthUser(result.user));
+    } catch {
+      setLoginError("Dang nhap Google that bai. Vui long thu lai.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const logout = () => {
+    clearAuthSession();
     setUser(null);
   };
 
@@ -66,8 +102,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       <LoginModal
         open={modalOpen}
         message={loginMessage}
+        isSubmitting={isSubmitting}
+        loginError={loginError}
+        googleEnabled={GOOGLE_ENABLED}
         onClose={() => setModalOpen(false)}
-        onLogin={login}
+        onGoogleCredential={onGoogleCredential}
       />
     </AuthContext.Provider>
   );
@@ -84,13 +123,19 @@ export function useAuth() {
 function LoginModal({
   open,
   message,
+  isSubmitting,
+  loginError,
+  googleEnabled,
   onClose,
-  onLogin
+  onGoogleCredential
 }: {
   open: boolean;
   message: string;
+  isSubmitting: boolean;
+  loginError: string;
+  googleEnabled: boolean;
   onClose: () => void;
-  onLogin: () => void;
+  onGoogleCredential: (credentialResponse: CredentialResponse) => void;
 }) {
   if (!open) return null;
 
@@ -101,27 +146,28 @@ function LoginModal({
         aria-modal="true"
         className="w-full max-w-md rounded-2xl border border-line bg-card p-5 transition duration-200"
       >
-        <h2 className="text-xl font-extrabold">Đăng nhập để tham gia</h2>
+        <h2 className="text-xl font-extrabold">Dang nhap de tham gia</h2>
         <p className="mt-2 text-sm text-muted">{message}</p>
 
-        <button
-          onClick={onLogin}
-          aria-label="Đăng nhập với Google"
-          className="mt-5 w-full rounded-lg bg-accent px-4 py-3 text-sm font-bold text-slate-950"
-        >
-          Đăng nhập với Google
-        </button>
+        {googleEnabled ? (
+          <div className="mt-5 grid place-items-center">
+            <GoogleLogin onSuccess={onGoogleCredential} onError={() => null} useOneTap={false} />
+          </div>
+        ) : (
+          <div className="mt-5 rounded-lg border border-amber-400/40 bg-amber-400/10 p-3 text-sm text-amber-200">
+            Thieu NEXT_PUBLIC_GOOGLE_CLIENT_ID. Chua the bat nut dang nhap Google.
+          </div>
+        )}
 
-        <p className="mt-2 text-xs text-muted">
-          Bản hiện tại đang dùng đăng nhập mock để duyệt UI/UX.
-        </p>
+        {isSubmitting ? <p className="mt-3 text-xs text-muted">Dang xu ly dang nhap...</p> : null}
+        {loginError ? <p className="mt-3 text-xs text-red-300">{loginError}</p> : null}
 
         <button
           onClick={onClose}
-          aria-label="Đóng cửa sổ đăng nhập"
+          aria-label="Dong cua so dang nhap"
           className="mt-4 w-full rounded-lg border border-line px-4 py-2 text-sm font-medium"
         >
-          Đóng
+          Dong
         </button>
       </div>
     </div>

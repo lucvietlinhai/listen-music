@@ -1,0 +1,28 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String?  @unique
+  name      String
+  avatar    String?
+  createdAt DateTime @default(now())
+}
+
+model Room {
+  id           String   @id @default(cuid())
+  name         String
+  hostId       String
+  isPublic     Boolean  @default(true)
+  passwordHash String?
+  createdAt    DateTime @default(now())
+
+  @@index([hostId])
+}

@@ -13,145 +13,151 @@ export type PhaseCard = {
 export const phaseCards: PhaseCard[] = [
   {
     phase: "01",
-    title: "Khung dự án & Landing page",
+    title: "Khung du an & Landing page",
     status: "done",
-    summary: "Hoàn tất landing page responsive với cấu trúc section theo kế hoạch.",
+    summary: "Hoan tat landing page responsive va cau truc section theo ke hoach.",
     completed: [
-      "Monorepo khởi tạo với apps/web và apps/server",
+      "Monorepo khoi tao voi apps/web va apps/server",
       "Landing page: Navbar, Hero, Use cases, How it works, Features, Footer",
-      "Theme + font Be Vietnam Pro + metadata cơ bản"
+      "Theme + font Be Vietnam Pro + metadata co ban"
     ],
-    remaining: ["Chưa làm i18n (theo yêu cầu đã bỏ, chỉ dùng tiếng Việt)."],
-    notes: ["Lighthouse chưa chốt lại số đo chính thức trong tài liệu."]
+    remaining: ["Khong dung i18n (chi 1 ngon ngu tieng Viet)."],
+    notes: ["Lighthouse chua chot chi so chinh thuc."]
   },
   {
     phase: "02",
-    title: "Trang Rooms & Modal tạo phòng",
+    title: "Trang Rooms & Modal tao phong",
     status: "done",
-    summary: "Đủ flow mock tạo phòng/join phòng, có private password modal.",
+    summary: "Day du flow tao phong/join phong, co private password modal.",
     completed: [
-      "Route /rooms với mock data",
+      "Route /rooms voi data that tu backend",
       "RoomCard, skeleton loading, empty state",
-      "CreateRoomModal và JoinPrivateModal",
+      "CreateRoomModal va JoinPrivateModal",
       "Flow redirect sang /room/[id]"
     ],
-    remaining: ["Chưa gọi API thật từ backend (đang mock data phía web)."]
+    remaining: ["Khong con hang muc ton dong."]
   },
   {
     phase: "03",
-    title: "Giao diện phòng nhạc UI tĩnh",
+    title: "Giao dien phong nhac",
     status: "done",
-    summary: "Room UI đầy đủ panel, responsive và các tương tác mock.",
+    summary: "Room UI day du panel, responsive va cac tuong tac co ban.",
     completed: [
       "Layout desktop/tablet/mobile + bottom sheet",
       "Player UI, Queue panel, Members panel, Chat panel",
-      "Emoji floating, vote skip UI, overlay lời nhắn AI",
-      "Toast nội bộ cho các thao tác chính"
+      "Emoji floating, vote skip UI, overlay loi nhan AI",
+      "Toast noi bo cho thao tac chinh"
     ],
-    remaining: ["Chưa kết nối realtime socket và YouTube IFrame thật."]
+    remaining: ["Dang tiep tuc noi realtime theo phase sau."]
   },
   {
     phase: "04",
-    title: "Auth UI & Trigger đăng nhập",
+    title: "Auth UI & Trigger dang nhap",
     status: "done",
-    summary: "Đã có trải nghiệm guest/member theo ngữ cảnh với login modal.",
+    summary: "Da co luong login modal va trigger theo ngu canh thao tac.",
     completed: [
-      "AuthProvider mock toàn app",
-      "Navbar chuyển trạng thái guest/member",
+      "AuthProvider toan app",
+      "Navbar chuyen trang thai guest/member",
       "Trigger login cho chat/reaction/add song/vote",
-      "Trang /profile hiển thị dữ liệu tài khoản mock"
+      "Trang /profile hien thi thong tin nguoi dung"
     ],
-    remaining: ["Chưa tích hợp NextAuth + Google OAuth thật (mới mock UI flow)."]
+    remaining: ["Khong con hang muc ton dong."]
   },
   {
     phase: "05",
     title: "Polish UI/UX",
     status: "done",
-    summary: "Đã thêm loading/error/not-found và tăng độ ổn định UX.",
+    summary: "Da them loading/error/not-found va tang do on dinh UX.",
     completed: [
-      "Global not-found và error page tùy biến",
-      "Loading states cho /rooms và /room/[id]",
-      "ErrorState component dùng chung",
-      "Bổ sung aria-label cho nhóm tương tác chính"
+      "Global not-found va error page tuy bien",
+      "Loading states cho /rooms va /room/[id]",
+      "ErrorState component dung chung",
+      "Bo sung aria-label cho nhom tuong tac chinh"
     ],
-    remaining: ["Chưa audit accessibility đầy đủ bằng tool tự động."]
+    remaining: ["Chua audit accessibility day du bang tool tu dong."]
   },
   {
     phase: "06",
-    title: "Backend hạ tầng & API cơ bản",
-    status: "in_progress",
-    summary: "Server chạy local, có API cơ bản; đang dùng fallback memory.",
+    title: "Backend ha tang & API co ban",
+    status: "done",
+    summary: "Server da dung Supabase (Prisma) va Upstash Redis that.",
     completed: [
       "apps/server: Express + TypeScript + scripts dev/build",
       "API: /health, /api/auth/guest, CRUD /api/rooms",
-      "API: /api/youtube/search có cache TTL",
-      "Auth middleware JWT cơ bản"
+      "API: /api/youtube/search co cache TTL",
+      "Auth middleware JWT co ban",
+      "Frontend /rooms goi danh sach phong tu backend",
+      "Flow tao phong frontend dung API POST /api/rooms",
+      "Prisma schema + repository DB/fallback memory",
+      "Prisma migrate thanh cong tren Supabase",
+      "Upstash Redis ket noi thanh cong (cache mode = redis)",
+      "Health check dependency: /health/deps"
     ],
-    remaining: [
-      "Chưa tích hợp Prisma + Supabase thật",
-      "Chưa dùng Redis thật (mới fallback memory nếu thiếu REDIS_URL)",
-      "Frontend /rooms chưa nối API thật"
-    ],
-    notes: ["Phase 06 đã chạy local nhưng chưa đạt mức production-ready theo plan gốc."]
+    remaining: ["Chua chuyen toan bo room data/chat sang persistent storage."],
+    notes: ["Dat muc tieu phase 06 cho local + cloud dependencies."]
   },
   {
     phase: "07",
     title: "Socket.IO Realtime Sync",
-    status: "pending",
-    summary: "Chưa bắt đầu.",
-    completed: [],
-    remaining: [
-      "Socket server + auth handshake",
-      "Events room join/leave và player play/pause/seek/next",
-      "Drift correction và sync join muộn",
-      "Tích hợp YouTube IFrame thật"
-    ]
+    status: "in_progress",
+    summary: "Da co realtime player/queue/member va host-only control.",
+    completed: [
+      "Socket.IO server tich hop vao backend",
+      "Auth handshake token khi ket noi socket",
+      "Events room:join/room:leave + member count realtime",
+      "Events player:play/pause/seek/next + broadcast state",
+      "Heartbeat cho drift correction co ban",
+      "Frontend /room/[id] da ket noi socket va nhan state realtime",
+      "Khoa quyen host-only cho dieu khien player",
+      "Dong bo queue:add/queue:remove realtime qua socket"
+    ],
+    remaining: ["Kiem thu 2 browser theo checkpoint play/pause/seek<1s", "Tich hop YouTube IFrame that"]
   },
   {
     phase: "08",
     title: "Chat, Queue, Vote, Google Auth",
-    status: "pending",
-    summary: "Chưa bắt đầu.",
-    completed: [],
-    remaining: [
-      "Chat/reaction realtime qua socket",
-      "Queue add/remove và vote skip theo ngưỡng",
-      "Google OAuth thật + lưu user DB",
-      "API stats cho live counter"
-    ]
+    status: "in_progress",
+    summary: "Da hoan thanh chat/reaction/vote realtime va Google OAuth that.",
+    completed: [
+      "Chat realtime qua events chat:send/chat:message",
+      "Reaction realtime qua events reaction:send/reaction:added",
+      "Vote skip realtime qua events vote:cast/vote:state",
+      "Vote skip theo nguong 60% thanh vien online (tu dong chuyen bai)",
+      "Google OAuth that: frontend login + backend verify id_token + upsert user Prisma"
+    ],
+    remaining: ["API stats cho live counter"]
   },
   {
     phase: "09",
     title: "AI Voice Radio",
     status: "pending",
-    summary: "Chưa bắt đầu.",
+    summary: "Chua bat dau.",
     completed: [],
     remaining: [
       "TTS service ElevenLabs + fallback FPT.AI",
       "Cache TTS Redis + Supabase Storage",
       "Trigger voice_message_start/done",
-      "Fallback Web Speech API phía client"
+      "Fallback Web Speech API phia client"
     ]
   },
   {
     phase: "10",
     title: "Deploy & Launch",
     status: "pending",
-    summary: "Chưa bắt đầu.",
+    summary: "Chua bat dau.",
     completed: [],
     remaining: [
-      "Deploy backend Railway và frontend Vercel",
+      "Deploy backend Railway va frontend Vercel",
       "Set env production + CORS + OAuth redirect",
-      "Test production 2 thiết bị",
+      "Test production 2 thiet bi",
       "Monitoring logs + uptime monitor"
     ]
   }
 ];
 
 export const executionRules: string[] = [
-  "Ưu tiên frontend-first, chỉ backend khi UI/UX đã được duyệt.",
-  "Không thay đổi phạm vi phase đang làm nếu chưa ghi rõ vào board.",
-  "Mỗi thay đổi phải cập nhật trạng thái phase tương ứng.",
-  "Các mục chưa đạt plan gốc phải ghi rõ ở phần Remaining/Notes."
+  "Uu tien frontend-first, chi backend khi UI/UX da duoc duyet.",
+  "Khong thay doi pham vi phase dang lam neu chua ghi ro vao board.",
+  "Moi thay doi phai cap nhat trang thai phase tuong ung.",
+  "Cac muc chua dat plan goc phai ghi ro o Remaining/Notes."
 ];
-

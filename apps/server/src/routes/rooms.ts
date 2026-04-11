@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
-import { roomStore } from "../lib/room-store";
+import { roomRepository } from "../lib/room-repository";
 import { authRequired, type RequestWithAuth } from "../middleware/auth";
 
 const createRoomSchema = z.object({
@@ -12,46 +12,66 @@ const createRoomSchema = z.object({
 export const roomsRouter = Router();
 
 roomsRouter.get("/", (_req, res) => {
-  res.json({ rooms: roomStore.list() });
+  void (async () => {
+    const rooms = await roomRepository.list();
+    res.json({ rooms, source: roomRepository.mode });
+  })().catch(() => {
+    res.status(500).json({ error: "ROOM_LIST_FAILED" });
+  });
 });
 
 roomsRouter.get("/:id", (req, res) => {
-  const room = roomStore.get(req.params.id);
-  if (!room) {
-    res.status(404).json({ error: "ROOM_NOT_FOUND" });
-    return;
-  }
-  res.json(room);
+  void (async () => {
+    const room = await roomRepository.get(req.params.id);
+    if (!room) {
+      res.status(404).json({ error: "ROOM_NOT_FOUND" });
+      return;
+    }
+    res.json(room);
+  })().catch(() => {
+    res.status(500).json({ error: "ROOM_GET_FAILED" });
+  });
 });
 
 roomsRouter.post("/", authRequired, (req: RequestWithAuth, res) => {
-  const parsed = createRoomSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: "VALIDATION_ERROR", detail: parsed.error.flatten() });
-    return;
-  }
+  void (async () => {
+    const parsed = createRoomSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "VALIDATION_ERROR", detail: parsed.error.flatten() });
+      return;
+    }
 
-  const room = roomStore.create({
-    name: parsed.data.name,
-    isPublic: parsed.data.isPublic,
-    passwordHash: parsed.data.password ? `mock_hash_${parsed.data.password}` : undefined,
-    hostId: req.auth!.userId
+    const room = await roomRepository.create({
+      name: parsed.data.name,
+      isPublic: parsed.data.isPublic,
+      passwordHash: parsed.data.password ? `mock_hash_${parsed.data.password}` : undefined,
+      hostId: req.auth!.userId
+    });
+    res.status(201).json(room);
+  })().catch((error: Error) => {
+    if (error.message === "DATABASE_NOT_CONFIGURED") {
+      res.status(500).json({ error: "DATABASE_NOT_CONFIGURED" });
+      return;
+    }
+    res.status(500).json({ error: "ROOM_CREATE_FAILED" });
   });
-  res.status(201).json(room);
 });
 
 roomsRouter.delete("/:id", authRequired, (req: RequestWithAuth, res) => {
-  const room = roomStore.get(req.params.id);
-  if (!room) {
-    res.status(404).json({ error: "ROOM_NOT_FOUND" });
-    return;
-  }
-  if (room.hostId !== req.auth!.userId) {
-    res.status(403).json({ error: "FORBIDDEN" });
-    return;
-  }
+  void (async () => {
+    const room = await roomRepository.get(req.params.id);
+    if (!room) {
+      res.status(404).json({ error: "ROOM_NOT_FOUND" });
+      return;
+    }
+    if (room.hostId !== req.auth!.userId) {
+      res.status(403).json({ error: "FORBIDDEN" });
+      return;
+    }
 
-  roomStore.remove(req.params.id);
-  res.status(204).send();
+    await roomRepository.remove(req.params.id);
+    res.status(204).send();
+  })().catch(() => {
+    res.status(500).json({ error: "ROOM_DELETE_FAILED" });
+  });
 });
-

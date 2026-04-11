@@ -7,6 +7,7 @@ type CacheValue<T> = {
 };
 
 class MemoryCache {
+  readonly mode = "memory" as const;
   private readonly map = new Map<string, CacheValue<unknown>>();
 
   async get<T>(key: string): Promise<T | null> {
@@ -29,9 +30,14 @@ class MemoryCache {
   async del(key: string): Promise<void> {
     this.map.delete(key);
   }
+
+  async ping(): Promise<"PONG"> {
+    return "PONG";
+  }
 }
 
 class RedisCache {
+  readonly mode = "redis" as const;
   constructor(private readonly redis: Redis) {}
 
   async get<T>(key: string): Promise<T | null> {
@@ -46,6 +52,12 @@ class RedisCache {
 
   async del(key: string): Promise<void> {
     await this.redis.del(key);
+  }
+
+  async ping(): Promise<"PONG"> {
+    await this.redis.connect();
+    const pong = await this.redis.ping();
+    return pong as "PONG";
   }
 }
 
@@ -62,4 +74,3 @@ export const createCacheClient = (): CacheClient => {
   });
   return new RedisCache(redis);
 };
-

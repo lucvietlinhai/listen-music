@@ -3,6 +3,8 @@ export type AuthTokenPayload = {
   name: string;
   isGuest: boolean;
   role: "guest" | "member" | "host";
+  email?: string;
+  avatar?: string;
 };
 
 export type Room = {
@@ -22,4 +24,3 @@ export type YoutubeVideo = {
   thumbnail: string;
   channelTitle: string;
 };
-

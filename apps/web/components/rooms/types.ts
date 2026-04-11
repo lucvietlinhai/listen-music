@@ -8,3 +8,10 @@ export type Room = {
   thumbnail: string;
 };
 
+export type ApiRoom = {
+  id: string;
+  name: string;
+  hostId: string;
+  isPublic: boolean;
+  createdAt: string;
+};

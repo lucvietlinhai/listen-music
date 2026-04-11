@@ -3,9 +3,10 @@ node_modules
 out
 dist
 coverage
+.idea
 .env
 .env.local
 .env.*.local
 *.log
+_dev*.txt
 *.tsbuildinfo
-

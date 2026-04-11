@@ -8,10 +8,39 @@ import { ErrorState } from "@/components/common/error-state";
 import { CreateRoomModal } from "@/components/rooms/create-room-modal";
 import { EmptyState } from "@/components/rooms/empty-state";
 import { JoinPrivateModal } from "@/components/rooms/join-private-modal";
-import { mockRooms } from "@/components/rooms/mock-rooms";
 import { RoomCard } from "@/components/rooms/room-card";
 import { RoomCardSkeleton } from "@/components/rooms/room-card-skeleton";
-import type { Room } from "@/components/rooms/types";
+import type { ApiRoom, Room } from "@/components/rooms/types";
+import { createRoom, fetchRooms } from "@/lib/api";
+
+const defaultSongs = [
+  { title: "Nơi Này Có Anh", channel: "Sơn Tùng M-TP" },
+  { title: "Bước Qua Mùa Cô Đơn", channel: "Vũ" },
+  { title: "Waiting For You", channel: "MONO" },
+  { title: "Có Chàng Trai Viết Lên Cây", channel: "Phan Mạnh Quỳnh" }
+];
+
+const defaultThumbnails = [
+  "https://images.unsplash.com/photo-1470229538611-16ba8c7ffbd7?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=1200&q=80",
+  "https://images.unsplash.com/photo-1507838153414-b4b713384a76?auto=format&fit=crop&w=1200&q=80"
+];
+
+const mapApiRoomToUi = (room: ApiRoom, index: number): Room => {
+  const song = defaultSongs[index % defaultSongs.length];
+  const thumbnail = defaultThumbnails[index % defaultThumbnails.length];
+
+  return {
+    id: room.id,
+    name: room.name,
+    currentSong: song.title,
+    channelName: song.channel,
+    listeners: (index % 9) + 2,
+    isPrivate: !room.isPublic,
+    thumbnail
+  };
+};
 
 export default function RoomsPage() {
   const router = useRouter();
@@ -31,12 +60,20 @@ export default function RoomsPage() {
       return;
     }
 
-    const timer = setTimeout(() => {
-      setRooms(mockRooms);
-      setIsLoading(false);
-    }, 850);
+    const loadRooms = async () => {
+      setIsLoading(true);
+      setHasError(false);
+      try {
+        const apiRooms = await fetchRooms();
+        setRooms(apiRooms.map(mapApiRoomToUi));
+      } catch {
+        setHasError(true);
+      } finally {
+        setIsLoading(false);
+      }
+    };
 
-    return () => clearTimeout(timer);
+    void loadRooms();
   }, []);
 
   useEffect(() => {
@@ -123,9 +160,18 @@ export default function RoomsPage() {
       <CreateRoomModal
         open={createModalOpen}
         onClose={() => setCreateModalOpen(false)}
-        onSubmit={() => {
-          setCreateModalOpen(false);
-          router.push("/room/mock-id");
+        onSubmit={async (payload) => {
+          try {
+            const room = await createRoom({
+              name: payload.name,
+              isPublic: !payload.isPrivate,
+              password: payload.password
+            });
+            setCreateModalOpen(false);
+            router.push(`/room/${room.id}`);
+          } catch {
+            setHasError(true);
+          }
         }}
       />
 
