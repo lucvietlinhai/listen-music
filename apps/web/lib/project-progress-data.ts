@@ -99,8 +99,8 @@ export const phaseCards: PhaseCard[] = [
   {
     phase: "07",
     title: "Socket.IO Realtime Sync",
-    status: "in_progress",
-    summary: "Da co realtime player/queue/member va host-only control.",
+    status: "done",
+    summary: "Da hoan thanh realtime player/queue/member va checkpoint sync <1s.",
     completed: [
       "Socket.IO server tich hop vao backend",
       "Auth handshake token khi ket noi socket",
@@ -109,35 +109,41 @@ export const phaseCards: PhaseCard[] = [
       "Heartbeat cho drift correction co ban",
       "Frontend /room/[id] da ket noi socket va nhan state realtime",
       "Khoa quyen host-only cho dieu khien player",
-      "Dong bo queue:add/queue:remove realtime qua socket"
+      "Dong bo queue:add/queue:remove realtime qua socket",
+      "Tich hop YouTube IFrame player that trong room",
+      "Checkpoint sync 2 client dat drift <1s (script checkpoint:sync)"
     ],
-    remaining: ["Kiem thu 2 browser theo checkpoint play/pause/seek<1s", "Tich hop YouTube IFrame that"]
+    remaining: ["Khong con hang muc ton dong."]
   },
   {
     phase: "08",
     title: "Chat, Queue, Vote, Google Auth",
-    status: "in_progress",
-    summary: "Da hoan thanh chat/reaction/vote realtime va Google OAuth that.",
+    status: "done",
+    summary: "Da hoan thanh chat/reaction/vote realtime, Google OAuth va API live stats.",
     completed: [
       "Chat realtime qua events chat:send/chat:message",
       "Reaction realtime qua events reaction:send/reaction:added",
       "Vote skip realtime qua events vote:cast/vote:state",
       "Vote skip theo nguong 60% thanh vien online (tu dong chuyen bai)",
-      "Google OAuth that: frontend login + backend verify id_token + upsert user Prisma"
+      "Google OAuth that: frontend login + backend verify id_token + upsert user Prisma",
+      "API /api/stats/live + frontend landing live counter",
+      "Tim kiem bai hat YouTube that + them bai bang URL YouTube trong room"
     ],
-    remaining: ["API stats cho live counter"]
+    remaining: ["Khong con hang muc ton dong."]
   },
   {
     phase: "09",
     title: "AI Voice Radio",
-    status: "pending",
-    summary: "Chua bat dau.",
-    completed: [],
+    status: "in_progress",
+    summary: "Da co khung TTS service + event voice realtime + fallback client speech.",
+    completed: [
+      "TTS service layer backend co cache (Redis/Memory)",
+      "Trigger realtime voice_message_start/voice_message_done qua Socket.IO",
+      "Room UI nhan event voice va fallback Web Speech API khi khong co audio URL"
+    ],
     remaining: [
-      "TTS service ElevenLabs + fallback FPT.AI",
-      "Cache TTS Redis + Supabase Storage",
-      "Trigger voice_message_start/done",
-      "Fallback Web Speech API phia client"
+      "Ket noi key ElevenLabs/FPT.AI that",
+      "Luu audio TTS len storage thay vi data URL/cache memory"
     ]
   },
   {

@@ -3,6 +3,8 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4
 type AuthResponse = {
   token: string;
   user?: ApiAuthUser;
+  error?: string;
+  detail?: string;
 };
 
 type ApiRoom = {
@@ -17,6 +19,20 @@ type CreateRoomPayload = {
   name: string;
   isPublic: boolean;
   password?: string;
+};
+
+export type LiveStats = {
+  listenersOnline: number;
+  roomsActive: number;
+  roomsTotal: number;
+  updatedAt: string;
+};
+
+export type YoutubeVideoResult = {
+  videoId: string;
+  title: string;
+  channelTitle: string;
+  thumbnail: string;
 };
 
 export type ApiAuthUser = {
@@ -93,11 +109,12 @@ export const loginWithGoogle = async (idToken: string) => {
     body: JSON.stringify({ idToken })
   });
 
+  const json = (await response.json()) as AuthResponse;
   if (!response.ok) {
-    throw new Error("Dang nhap Google that bai");
+    const detail = json.detail ?? json.error ?? "Dang nhap Google that bai";
+    throw new Error(detail);
   }
 
-  const json = (await response.json()) as AuthResponse;
   setStoredAuthToken(json.token);
   if (json.user) {
     setStoredAuthUser(json.user);
@@ -145,4 +162,56 @@ export const createRoom = async (payload: CreateRoomPayload) => {
   }
 
   return (await response.json()) as ApiRoom;
+};
+
+export const fetchLiveStats = async (): Promise<LiveStats> => {
+  const response = await fetch(`${API_BASE_URL}/api/stats/live`, {
+    headers: {
+      "Content-Type": "application/json"
+    },
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    throw new Error("Khong the tai live stats");
+  }
+
+  return (await response.json()) as LiveStats;
+};
+
+export const searchYoutubeVideos = async (keyword: string): Promise<YoutubeVideoResult[]> => {
+  const query = keyword.trim();
+  if (!query) return [];
+
+  const url = new URL(`${API_BASE_URL}/api/youtube/search`);
+  url.searchParams.set("q", query);
+  const response = await fetch(url.toString(), {
+    headers: {
+      "Content-Type": "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error("Khong the tim kiem YouTube");
+  }
+
+  const json = (await response.json()) as { items: YoutubeVideoResult[] };
+  return json.items;
+};
+
+export const resolveYoutubeUrl = async (youtubeUrl: string): Promise<YoutubeVideoResult> => {
+  const url = new URL(`${API_BASE_URL}/api/youtube/resolve`);
+  url.searchParams.set("url", youtubeUrl.trim());
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      "Content-Type": "application/json"
+    }
+  });
+  if (!response.ok) {
+    throw new Error("URL YouTube khong hop le hoac khong the lay bai");
+  }
+
+  const json = (await response.json()) as { item: YoutubeVideoResult };
+  return json.item;
 };

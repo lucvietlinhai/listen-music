@@ -78,66 +78,86 @@ class PrismaRoomRepository implements RoomRepository {
   async list(): Promise<PublicRoom[]> {
     const prisma = getPrismaClient();
     if (!prisma) {
-      return [];
+      return memoryRepo.list();
     }
-    const rows = await prisma.room.findMany({
-      orderBy: { createdAt: "desc" }
-    });
+    try {
+      const rows = await prisma.room.findMany({
+        orderBy: { createdAt: "desc" }
+      });
 
-    return rows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      hostId: row.hostId,
-      isPublic: row.isPublic,
-      createdAt: row.createdAt.toISOString()
-    }));
+      return rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+        hostId: row.hostId,
+        isPublic: row.isPublic,
+        createdAt: row.createdAt.toISOString()
+      }));
+    } catch (error) {
+      console.error("roomRepository.list fallback to memory", error);
+      return memoryRepo.list();
+    }
   }
 
   async get(id: string): Promise<PublicRoom | null> {
     const prisma = getPrismaClient();
-    if (!prisma) return null;
+    if (!prisma) return memoryRepo.get(id);
 
-    const row = await prisma.room.findUnique({ where: { id } });
-    if (!row) return null;
-    return {
-      id: row.id,
-      name: row.name,
-      hostId: row.hostId,
-      isPublic: row.isPublic,
-      createdAt: row.createdAt.toISOString()
-    };
+    try {
+      const row = await prisma.room.findUnique({ where: { id } });
+      if (!row) return null;
+      return {
+        id: row.id,
+        name: row.name,
+        hostId: row.hostId,
+        isPublic: row.isPublic,
+        createdAt: row.createdAt.toISOString()
+      };
+    } catch (error) {
+      console.error("roomRepository.get fallback to memory", error);
+      return memoryRepo.get(id);
+    }
   }
 
   async create(input: CreateRoomInput): Promise<PublicRoom> {
     const prisma = getPrismaClient();
     if (!prisma) {
-      throw new Error("DATABASE_NOT_CONFIGURED");
+      return memoryRepo.create(input);
     }
 
-    const row = await prisma.room.create({
-      data: {
-        name: input.name,
-        hostId: input.hostId,
-        isPublic: input.isPublic,
-        passwordHash: input.passwordHash
-      }
-    });
+    try {
+      const row = await prisma.room.create({
+        data: {
+          name: input.name,
+          hostId: input.hostId,
+          isPublic: input.isPublic,
+          passwordHash: input.passwordHash
+        }
+      });
 
-    return {
-      id: row.id,
-      name: row.name,
-      hostId: row.hostId,
-      isPublic: row.isPublic,
-      createdAt: row.createdAt.toISOString()
-    };
+      return {
+        id: row.id,
+        name: row.name,
+        hostId: row.hostId,
+        isPublic: row.isPublic,
+        createdAt: row.createdAt.toISOString()
+      };
+    } catch (error) {
+      console.error("roomRepository.create fallback to memory", error);
+      return memoryRepo.create(input);
+    }
   }
 
   async remove(id: string): Promise<boolean> {
     const prisma = getPrismaClient();
-    if (!prisma) return false;
+    if (!prisma) return memoryRepo.remove(id);
 
-    const deleted = await prisma.room.deleteMany({ where: { id } });
-    return deleted.count > 0;
+    try {
+      const deleted = await prisma.room.deleteMany({ where: { id } });
+      return deleted.count > 0;
+    } catch (error) {
+      console.error("roomRepository.remove fallback to memory", error);
+      return memoryRepo.remove(id);
+    }
   }
 }
 
@@ -145,4 +165,3 @@ const memoryRepo = new MemoryRoomRepository();
 const prismaRepo = new PrismaRoomRepository();
 
 export const roomRepository: RoomRepository = isDatabaseConfigured() ? prismaRepo : memoryRepo;
-

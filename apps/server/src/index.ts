@@ -6,7 +6,8 @@ import { config } from "./config";
 import { createCacheClient } from "./lib/cache";
 import { isDatabaseConfigured } from "./lib/db";
 import { roomRepository } from "./lib/room-repository";
-import { registerRoomSync } from "./realtime/room-sync";
+import { createTtsService } from "./lib/tts-service";
+import { getRealtimeStats, registerRoomSync } from "./realtime/room-sync";
 import { authOptional } from "./middleware/auth";
 import { authRouter } from "./routes/auth";
 import { roomsRouter } from "./routes/rooms";
@@ -15,6 +16,7 @@ import { createYoutubeRouter } from "./routes/youtube";
 const app = express();
 const httpServer = createServer(app);
 const cache = createCacheClient();
+const ttsService = createTtsService(cache);
 const io = new Server(httpServer, {
   cors: {
     origin: config.socketCorsOrigin,
@@ -59,6 +61,33 @@ app.get("/health/deps", async (_req, res) => {
   }
 });
 
+app.get("/api/stats/live", (_req, res) => {
+  void (async () => {
+    const [roomsResult, realtimeResult] = await Promise.allSettled([
+      roomRepository.list(),
+      getRealtimeStats(cache)
+    ]);
+    const roomsTotal = roomsResult.status === "fulfilled" ? roomsResult.value.length : 0;
+    const realtime =
+      realtimeResult.status === "fulfilled"
+        ? realtimeResult.value
+        : {
+            activeRooms: 0,
+            activeMembers: 0
+          };
+
+    res.json({
+      listenersOnline: realtime.activeMembers,
+      roomsActive: realtime.activeRooms,
+      roomsTotal,
+      updatedAt: new Date().toISOString()
+    });
+  })().catch((error) => {
+    console.error("live stats failed", error);
+    res.status(500).json({ error: "STATS_LIVE_FAILED" });
+  });
+});
+
 app.use("/api/auth", authRouter);
 app.use("/api/rooms", roomsRouter);
 app.use("/api/youtube", createYoutubeRouter(cache));
@@ -67,7 +96,7 @@ app.use((_req, res) => {
   res.status(404).json({ error: "NOT_FOUND" });
 });
 
-registerRoomSync(io, cache);
+registerRoomSync(io, cache, ttsService);
 
 httpServer.listen(config.port, () => {
   console.log(`ListenWithMe server running at http://localhost:${config.port}`);

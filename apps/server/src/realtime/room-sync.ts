@@ -1,5 +1,6 @@
 import type { Server, Socket } from "socket.io";
 import type { CacheClient } from "../lib/cache";
+import type { TtsService } from "../lib/tts-service";
 import { verifyToken } from "../lib/auth";
 import type { AuthTokenPayload } from "../types";
 
@@ -41,7 +42,7 @@ type RoomStatePayload = {
 };
 
 const DEFAULT_VIDEO_ID = "hLQl3WQQoQ0";
-const HEARTBEAT_MS = 30_000;
+const HEARTBEAT_MS = 5_000;
 const CHAT_LIMIT = 60;
 const SKIP_THRESHOLD = 0.6;
 
@@ -66,6 +67,12 @@ const adjustTime = (state: RoomPlaybackState) => {
   const elapsed = (Date.now() - state.updatedAt) / 1000;
   return Math.max(0, state.currentTime + elapsed);
 };
+
+const materializeState = (state: RoomPlaybackState): RoomPlaybackState => ({
+  ...state,
+  currentTime: adjustTime(state),
+  updatedAt: Date.now()
+});
 
 const loadMembers = async (cache: CacheClient, roomId: string) =>
   (await cache.get<string[]>(membersKey(roomId))) ?? [];
@@ -142,7 +149,7 @@ const nextTrackByVote = async (io: Server, cache: CacheClient, roomId: string, f
   };
 
   await Promise.all([saveQueue(cache, roomId, rest), saveState(cache, roomId, nextState), saveVotes(cache, roomId, [])]);
-  io.to(roomId).emit("player:state", { roomId, state: nextState, action: "vote_skip" });
+  io.to(roomId).emit("player:state", { roomId, state: materializeState(nextState), action: "vote_skip" });
   await Promise.all([emitQueue(io, cache, roomId), emitVoteState(io, cache, roomId)]);
 };
 
@@ -186,7 +193,22 @@ const emitAuthError = (socket: Socket, code: string) => {
   socket.emit("auth:error", { code });
 };
 
-export const registerRoomSync = (io: Server, cache: CacheClient) => {
+export const getRealtimeStats = async (cache: CacheClient) => {
+  const roomIds = Array.from(activeRooms.values());
+  const memberCounts = await Promise.all(
+    roomIds.map(async (roomId) => {
+      const members = await loadMembers(cache, roomId);
+      return members.length;
+    })
+  );
+
+  return {
+    activeRooms: roomIds.length,
+    activeMembers: memberCounts.reduce((sum, value) => sum + value, 0)
+  };
+};
+
+export const registerRoomSync = (io: Server, cache: CacheClient, ttsService?: TtsService) => {
   io.use((socket, next) => {
     const auth = (socket.handshake.auth ?? {}) as SocketAuth;
     const token = auth.token;
@@ -227,10 +249,7 @@ export const registerRoomSync = (io: Server, cache: CacheClient) => {
       ]);
       const payload: RoomStatePayload = {
         roomId,
-        state: {
-          ...state,
-          currentTime: adjustTime(state)
-        },
+        state: materializeState(state),
         members: members.length,
         queue,
         chat,
@@ -284,7 +303,7 @@ export const registerRoomSync = (io: Server, cache: CacheClient) => {
           updatedAt: Date.now()
         };
         await saveState(cache, roomId, nextState);
-        io.to(roomId).emit("player:state", { roomId, state: nextState, action: "play" });
+        io.to(roomId).emit("player:state", { roomId, state: materializeState(nextState), action: "play" });
       }
     );
 
@@ -305,7 +324,7 @@ export const registerRoomSync = (io: Server, cache: CacheClient) => {
           updatedAt: Date.now()
         };
         await saveState(cache, roomId, nextState);
-        io.to(roomId).emit("player:state", { roomId, state: nextState, action: "pause" });
+        io.to(roomId).emit("player:state", { roomId, state: materializeState(nextState), action: "pause" });
       }
     );
 
@@ -323,7 +342,7 @@ export const registerRoomSync = (io: Server, cache: CacheClient) => {
         updatedAt: Date.now()
       };
       await saveState(cache, roomId, nextState);
-      io.to(roomId).emit("player:state", { roomId, state: nextState, action: "seek" });
+      io.to(roomId).emit("player:state", { roomId, state: materializeState(nextState), action: "seek" });
     });
 
     socket.on("player:next", async ({ roomId }: { roomId: string }) => {
@@ -345,7 +364,7 @@ export const registerRoomSync = (io: Server, cache: CacheClient) => {
         isPlaying: true
       };
       await saveState(cache, roomId, nextState);
-      io.to(roomId).emit("player:state", { roomId, state: nextState, action: "next" });
+      io.to(roomId).emit("player:state", { roomId, state: materializeState(nextState), action: "next" });
       await emitQueue(io, cache, roomId);
     });
 
@@ -423,6 +442,53 @@ export const registerRoomSync = (io: Server, cache: CacheClient) => {
         queue.filter((item) => item.id !== id)
       );
       await emitQueue(io, cache, roomId);
+    });
+
+    socket.on("voice:request", async ({ roomId, text }: { roomId: string; text: string }) => {
+      const auth = (socket.data as SocketData).auth;
+      const transcript = text.trim().slice(0, 500);
+      if (!roomId || !transcript) return;
+
+      const messageId = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+      io.to(roomId).emit("voice_message_start", {
+        roomId,
+        id: messageId,
+        userId: auth.userId,
+        user: auth.name,
+        text: transcript
+      });
+
+      try {
+        const synthesized = ttsService
+          ? await ttsService.synthesize({ roomId, text: transcript })
+          : {
+              provider: "mock" as const,
+              transcript,
+              audioUrl: null,
+              cacheHit: false
+            };
+
+        io.to(roomId).emit("voice_message_done", {
+          roomId,
+          id: messageId,
+          text: synthesized.transcript,
+          audioUrl: synthesized.audioUrl,
+          provider: synthesized.provider,
+          cacheHit: synthesized.cacheHit,
+          fallbackWebSpeech: !synthesized.audioUrl
+        });
+      } catch (error) {
+        io.to(roomId).emit("voice_message_done", {
+          roomId,
+          id: messageId,
+          text: transcript,
+          audioUrl: null,
+          provider: "mock",
+          cacheHit: false,
+          fallbackWebSpeech: true,
+          error: error instanceof Error ? error.message : "VOICE_SYNTHESIS_FAILED"
+        });
+      }
     });
 
     socket.on("disconnect", async () => {

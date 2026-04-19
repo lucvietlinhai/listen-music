@@ -75,8 +75,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error("Tai khoan khong hop le.");
       }
       loginSuccess(toAuthUser(result.user));
-    } catch {
-      setLoginError("Dang nhap Google that bai. Vui long thu lai.");
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Dang nhap Google that bai. Vui long thu lai.";
+      setLoginError(detail);
     } finally {
       setIsSubmitting(false);
     }

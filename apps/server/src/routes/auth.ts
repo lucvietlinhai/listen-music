@@ -51,32 +51,52 @@ authRouter.post("/google", (req, res) => {
     }
 
     const prisma = getPrismaClient();
-    if (!prisma) {
-      res.status(500).json({ error: "DATABASE_NOT_CONFIGURED" });
-      return;
-    }
+    let payload: AuthTokenPayload;
 
-    const user = await prisma.user.upsert({
-      where: { email: profile.email },
-      update: {
-        name: profile.name,
-        avatar: profile.picture ?? null
-      },
-      create: {
-        email: profile.email,
-        name: profile.name,
-        avatar: profile.picture ?? null
+    if (prisma) {
+      try {
+        const user = await prisma.user.upsert({
+          where: { email: profile.email },
+          update: {
+            name: profile.name,
+            avatar: profile.picture ?? null
+          },
+          create: {
+            email: profile.email,
+            name: profile.name,
+            avatar: profile.picture ?? null
+          }
+        });
+
+        payload = {
+          userId: user.id,
+          name: user.name,
+          isGuest: false,
+          role: "member",
+          email: user.email ?? undefined,
+          avatar: user.avatar ?? undefined
+        };
+      } catch (dbError) {
+        console.error("google auth db fallback", dbError);
+        payload = {
+          userId: `google_${profile.sub ?? profile.email}`,
+          name: profile.name,
+          isGuest: false,
+          role: "member",
+          email: profile.email,
+          avatar: profile.picture ?? undefined
+        };
       }
-    });
-
-    const payload: AuthTokenPayload = {
-      userId: user.id,
-      name: user.name,
-      isGuest: false,
-      role: "member",
-      email: user.email ?? undefined,
-      avatar: user.avatar ?? undefined
-    };
+    } else {
+      payload = {
+        userId: `google_${profile.sub ?? profile.email}`,
+        name: profile.name,
+        isGuest: false,
+        role: "member",
+        email: profile.email,
+        avatar: profile.picture ?? undefined
+      };
+    }
 
     res.json({
       token: signToken(payload),

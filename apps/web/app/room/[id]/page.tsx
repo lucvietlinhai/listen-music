@@ -1,11 +1,12 @@
 "use client";
 
-import { FormEvent, RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, RefObject, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { io, Socket } from "socket.io-client";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ErrorState } from "@/components/common/error-state";
-import { getGuestToken } from "@/lib/api";
+import { YoutubePlayer } from "@/components/room/youtube-player";
+import { getGuestToken, resolveYoutubeUrl, searchYoutubeVideos, type YoutubeVideoResult } from "@/lib/api";
 
 type RoomPageProps = {
   params: { id: string };
@@ -13,6 +14,14 @@ type RoomPageProps = {
 
 type QueueItem = {
   id: string;
+  videoId: string;
+  title: string;
+  channel: string;
+  thumbnail: string;
+};
+
+type SearchResultItem = {
+  videoId: string;
   title: string;
   channel: string;
   thumbnail: string;
@@ -53,40 +62,16 @@ type PlaybackState = {
   hostId: string;
 };
 
-const searchPool = [
-  {
-    id: "s1",
-    title: "Nơi Này Có Anh",
-    channel: "Sơn Tùng M-TP",
-    thumbnail:
-      "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=600&q=80"
-  },
-  {
-    id: "s2",
-    title: "Waiting For You",
-    channel: "MONO",
-    thumbnail:
-      "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&w=600&q=80"
-  },
-  {
-    id: "s3",
-    title: "Bước Qua Mùa Cô Đơn",
-    channel: "Vũ",
-    thumbnail:
-      "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?auto=format&fit=crop&w=600&q=80"
-  },
-  {
-    id: "s4",
-    title: "Có Chàng Trai Viết Lên Cây",
-    channel: "Phan Mạnh Quỳnh",
-    thumbnail:
-      "https://images.unsplash.com/photo-1513883049090-d0b7439799bf?auto=format&fit=crop&w=600&q=80"
-  }
-];
+const getAdjustedTime = (state: Pick<PlaybackState, "currentTime" | "isPlaying" | "updatedAt">) => {
+  if (!state.isPlaying) return state.currentTime;
+  const elapsed = (Date.now() - state.updatedAt) / 1000;
+  return Math.max(0, state.currentTime + elapsed);
+};
 
 const initialQueue: QueueItem[] = [
   {
     id: "q1",
+    videoId: "hLQl3WQQoQ0",
     title: "Nơi Này Có Anh",
     channel: "Sơn Tùng M-TP",
     thumbnail:
@@ -94,6 +79,7 @@ const initialQueue: QueueItem[] = [
   },
   {
     id: "q2",
+    videoId: "V5BZrR3YkJY",
     title: "Bước Qua Mùa Cô Đơn",
     channel: "Vũ",
     thumbnail:
@@ -101,6 +87,7 @@ const initialQueue: QueueItem[] = [
   },
   {
     id: "q3",
+    videoId: "eXz9Hf2eN6Q",
     title: "Chạy Ngay Đi",
     channel: "Sơn Tùng M-TP",
     thumbnail:
@@ -141,6 +128,11 @@ export default function RoomPage({ params }: RoomPageProps) {
 
   const [queue, setQueue] = useState<QueueItem[]>(initialQueue);
   const [search, setSearch] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [urlLoading, setUrlLoading] = useState(false);
   const [sheet, setSheet] = useState<"queue" | "members" | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -149,6 +141,9 @@ export default function RoomPage({ params }: RoomPageProps) {
   const [hasVoted, setHasVoted] = useState(false);
   const [showVoiceOverlay, setShowVoiceOverlay] = useState(false);
   const [typedText, setTypedText] = useState("");
+  const [voiceText, setVoiceText] = useState(
+    "Một lời nhắn ẩn danh: Chúc bạn tối nay thật bình yên và ngủ thật ngon."
+  );
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [hasError, setHasError] = useState(false);
   const [onlineCount, setOnlineCount] = useState(members.length);
@@ -166,23 +161,53 @@ export default function RoomPage({ params }: RoomPageProps) {
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const displayTimeRef = useRef(84);
-  const fullVoiceText = "Một lời nhắn ẩn danh: Chúc bạn tối nay thật bình yên và ngủ thật ngon.";
   const totalMembers = Math.max(onlineCount, 1);
   const role = user ? "host" : "guest";
   const canControlPlayer = playback.hostId === currentUserId || !playback.hostId;
 
-  const filteredResults = useMemo(() => {
-    if (!search.trim()) return searchPool;
-    const keyword = search.toLowerCase();
-    return searchPool.filter(
-      (item) =>
-        item.title.toLowerCase().includes(keyword) || item.channel.toLowerCase().includes(keyword)
-    );
-  }, [search]);
-
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
+
+  useEffect(() => {
+    const keyword = search.trim();
+    if (!keyword) {
+      setSearchResults([]);
+      setSearchError("");
+      return;
+    }
+
+    let cancelled = false;
+    setSearchLoading(true);
+    setSearchError("");
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const items = await searchYoutubeVideos(keyword);
+          if (cancelled) return;
+          setSearchResults(
+            items.map((item) => ({
+              videoId: item.videoId,
+              title: item.title,
+              channel: item.channelTitle,
+              thumbnail: item.thumbnail
+            }))
+          );
+        } catch {
+          if (cancelled) return;
+          setSearchError("Không thể tìm kiếm YouTube lúc này");
+        } finally {
+          if (cancelled) return;
+          setSearchLoading(false);
+        }
+      })();
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [search]);
 
   useEffect(() => {
     displayTimeRef.current = displayTime;
@@ -237,7 +262,7 @@ export default function RoomPage({ params }: RoomPageProps) {
             if (!mounted) return;
             setOnlineCount(payload.members);
             setPlayback(payload.state);
-            setDisplayTime(payload.state.currentTime);
+            setDisplayTime(getAdjustedTime(payload.state));
             setQueue(payload.queue);
             setChatMessages(payload.chat);
             setVotes(payload.vote.count);
@@ -258,20 +283,25 @@ export default function RoomPage({ params }: RoomPageProps) {
         socket.on("player:state", (payload: { state: PlaybackState }) => {
           if (!mounted) return;
           setPlayback(payload.state);
-          setDisplayTime(payload.state.currentTime);
+          setDisplayTime(getAdjustedTime(payload.state));
         });
 
-        socket.on("player:heartbeat", (payload: { currentTime: number; isPlaying: boolean }) => {
+        socket.on("player:heartbeat", (payload: { currentTime: number; isPlaying: boolean; updatedAt: number }) => {
           if (!mounted) return;
-          const diff = Math.abs(displayTimeRef.current - payload.currentTime);
+          const estimated = getAdjustedTime({
+            currentTime: payload.currentTime,
+            isPlaying: payload.isPlaying,
+            updatedAt: payload.updatedAt
+          });
+          const diff = Math.abs(displayTimeRef.current - estimated);
           setPlayback((prev) => ({
             ...prev,
-            currentTime: diff > 2 ? payload.currentTime : prev.currentTime,
+            currentTime: diff > 0.75 ? estimated : prev.currentTime,
             isPlaying: payload.isPlaying,
-            updatedAt: Date.now()
+            updatedAt: payload.updatedAt
           }));
-          if (diff > 2) {
-            setDisplayTime(payload.currentTime);
+          if (diff > 0.75) {
+            setDisplayTime(estimated);
           }
         });
 
@@ -316,6 +346,33 @@ export default function RoomPage({ params }: RoomPageProps) {
           }));
           pushToast("Host đã thay đổi trong phòng", "👑");
         });
+        socket.on("voice_message_start", (payload: { text: string }) => {
+          if (!mounted) return;
+          setVoiceText(payload.text);
+          setShowVoiceOverlay(true);
+        });
+
+        socket.on(
+          "voice_message_done",
+          (payload: { text: string; audioUrl: string | null; provider: string; fallbackWebSpeech: boolean }) => {
+            if (!mounted) return;
+            if (payload.audioUrl) {
+              const audio = new Audio(payload.audioUrl);
+              void audio.play().catch(() => {
+                if ("speechSynthesis" in window) {
+                  const utter = new SpeechSynthesisUtterance(payload.text);
+                  utter.lang = "vi-VN";
+                  window.speechSynthesis.speak(utter);
+                }
+              });
+            } else if (payload.fallbackWebSpeech && "speechSynthesis" in window) {
+              const utter = new SpeechSynthesisUtterance(payload.text);
+              utter.lang = "vi-VN";
+              window.speechSynthesis.speak(utter);
+            }
+            pushToast(`Voice ready (${payload.provider})`, "ðŸ“»");
+          }
+        );
       } catch {
         setIsSocketConnected(false);
       }
@@ -342,25 +399,25 @@ export default function RoomPage({ params }: RoomPageProps) {
     let i = 0;
     const typeTimer = setInterval(() => {
       i += 1;
-      setTypedText(fullVoiceText.slice(0, i));
-      if (i >= fullVoiceText.length) {
+      setTypedText(voiceText.slice(0, i));
+      if (i >= voiceText.length) {
         clearInterval(typeTimer);
       }
     }, 28);
 
-    const closeTimer = setTimeout(() => setShowVoiceOverlay(false), 4300);
+    const closeTimer = setTimeout(() => setShowVoiceOverlay(false), 6000);
 
     return () => {
       clearInterval(typeTimer);
       clearTimeout(closeTimer);
     };
-  }, [showVoiceOverlay]);
+  }, [showVoiceOverlay, voiceText]);
 
   useEffect(() => {
     if (!playback.isPlaying) return;
     const timer = setInterval(() => {
-      setDisplayTime((prev) => prev + 1);
-    }, 1000);
+      setDisplayTime((prev) => prev + 0.25);
+    }, 250);
     return () => clearInterval(timer);
   }, [playback.isPlaying]);
 
@@ -407,20 +464,45 @@ export default function RoomPage({ params }: RoomPageProps) {
     pushToast("Đã copy link phòng", "✅");
   };
 
-  const handleAddSong = (item: QueueItem) => {
+  const handleAddSong = (item: SearchResultItem) => {
     requireLogin("Đăng nhập để thêm bài vào hàng đợi.", () => {
-      const nextItem = { ...item, id: `${item.id}-${Date.now()}` };
+      const nextItem = { ...item, id: `${item.videoId}-${Date.now()}` };
       socketRef.current?.emit("queue:add", {
         roomId: params.id,
         item: {
           id: nextItem.id,
-          videoId: nextItem.id,
+          videoId: nextItem.videoId,
           title: nextItem.title,
           channel: nextItem.channel,
           thumbnail: nextItem.thumbnail
         }
       });
       pushToast(`Đã thêm "${item.title}" vào hàng đợi`, "🎵");
+    });
+  };
+
+  const handleAddFromUrl = () => {
+    requireLogin("Đăng nhập để thêm bài từ URL YouTube.", () => {
+      const raw = youtubeUrl.trim();
+      if (!raw) return;
+
+      setUrlLoading(true);
+      void (async () => {
+        try {
+          const item = await resolveYoutubeUrl(raw);
+          handleAddSong({
+            videoId: item.videoId,
+            title: item.title,
+            channel: item.channelTitle,
+            thumbnail: item.thumbnail
+          });
+          setYoutubeUrl("");
+        } catch {
+          pushToast("URL YouTube không hợp lệ hoặc không thể lấy bài", "⚠️");
+        } finally {
+          setUrlLoading(false);
+        }
+      })();
     });
   };
 
@@ -483,6 +565,18 @@ export default function RoomPage({ params }: RoomPageProps) {
     });
   };
 
+  const handleVoiceRequest = () => {
+    const socket = socketRef.current;
+    if (!socket) {
+      pushToast("Socket chÆ°a káº¿t ná»‘i", "âš ï¸");
+      return;
+    }
+    socket.emit("voice:request", {
+      roomId: params.id,
+      text: "Má»™t lá»i nháº¯n áº©n danh: ChÃºc báº¡n tá»‘i nay tháº­t bÃ¬nh yÃªn vÃ  ngá»§ tháº­t ngon."
+    });
+  };
+
   return (
     <>
       <main className="min-h-screen bg-bg pb-28 md:pb-8">
@@ -529,7 +623,13 @@ export default function RoomPage({ params }: RoomPageProps) {
                 <SearchPanel
                   search={search}
                   setSearch={setSearch}
-                  results={filteredResults}
+                  results={searchResults}
+                  loading={searchLoading}
+                  error={searchError}
+                  youtubeUrl={youtubeUrl}
+                  setYoutubeUrl={setYoutubeUrl}
+                  urlLoading={urlLoading}
+                  onAddFromUrl={handleAddFromUrl}
                   onAdd={handleAddSong}
                 />
                 <div className="my-4 border-t border-line" />
@@ -540,11 +640,11 @@ export default function RoomPage({ params }: RoomPageProps) {
 
               <section className="space-y-4 md:col-span-1 lg:col-span-6">
                 <article className="rounded-2xl border border-line bg-card p-4 sm:p-5">
-                  <div className="relative overflow-hidden rounded-xl">
-                    <img
-                      src="https://images.unsplash.com/photo-1511379938547-c1f69419868d?auto=format&fit=crop&w=1200&q=80"
-                      alt="Ảnh bài hát đang phát"
-                      className="h-56 w-full object-cover sm:h-72"
+                  <div className="relative overflow-hidden rounded-xl border border-line bg-surface">
+                    <YoutubePlayer
+                      videoId={playback.videoId}
+                      isPlaying={playback.isPlaying}
+                      currentTime={displayTime}
                     />
                   </div>
                   <h2 className="mt-4 text-2xl font-extrabold">Nơi Này Có Anh</h2>
@@ -598,7 +698,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                       Next
                     </button>
                     <button
-                      onClick={() => setShowVoiceOverlay(true)}
+                      onClick={handleVoiceRequest}
                       className="rounded-lg bg-accent-soft px-3 py-2 text-sm font-semibold text-accent"
                     >
                       Demo lời nhắn AI
@@ -670,7 +770,13 @@ export default function RoomPage({ params }: RoomPageProps) {
                   <SearchPanel
                     search={search}
                     setSearch={setSearch}
-                    results={filteredResults}
+                    results={searchResults}
+                    loading={searchLoading}
+                    error={searchError}
+                    youtubeUrl={youtubeUrl}
+                    setYoutubeUrl={setYoutubeUrl}
+                    urlLoading={urlLoading}
+                    onAddFromUrl={handleAddFromUrl}
                     onAdd={handleAddSong}
                   />
                 </article>
@@ -721,7 +827,13 @@ export default function RoomPage({ params }: RoomPageProps) {
                 <SearchPanel
                   search={search}
                   setSearch={setSearch}
-                  results={filteredResults}
+                  results={searchResults}
+                  loading={searchLoading}
+                  error={searchError}
+                  youtubeUrl={youtubeUrl}
+                  setYoutubeUrl={setYoutubeUrl}
+                  urlLoading={urlLoading}
+                  onAddFromUrl={handleAddFromUrl}
                   onAdd={handleAddSong}
                 />
                 <div className="my-4 border-t border-line" />
@@ -773,12 +885,24 @@ function SearchPanel({
   search,
   setSearch,
   results,
+  loading,
+  error,
+  youtubeUrl,
+  setYoutubeUrl,
+  urlLoading,
+  onAddFromUrl,
   onAdd
 }: {
   search: string;
   setSearch: (value: string) => void;
-  results: QueueItem[];
-  onAdd: (item: QueueItem) => void;
+  results: SearchResultItem[];
+  loading: boolean;
+  error: string;
+  youtubeUrl: string;
+  setYoutubeUrl: (value: string) => void;
+  urlLoading: boolean;
+  onAddFromUrl: () => void;
+  onAdd: (item: SearchResultItem) => void;
 }) {
   return (
     <div>
@@ -789,9 +913,29 @@ function SearchPanel({
         className="mt-2 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none ring-accent/30 transition focus:ring-2"
         placeholder="Nhập tên bài hoặc nghệ sĩ"
       />
+      <div className="mt-2 flex gap-2">
+        <input
+          value={youtubeUrl}
+          onChange={(event) => setYoutubeUrl(event.target.value)}
+          className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none ring-accent/30 transition focus:ring-2"
+          placeholder="Dán URL YouTube..."
+        />
+        <button
+          onClick={onAddFromUrl}
+          disabled={urlLoading}
+          className="rounded-md border border-line px-3 py-2 text-xs font-semibold disabled:opacity-50"
+        >
+          {urlLoading ? "Đang lấy..." : "Add URL"}
+        </button>
+      </div>
+      {loading ? <p className="mt-2 text-xs text-muted">Đang tìm kiếm...</p> : null}
+      {!loading && error ? <p className="mt-2 text-xs text-amber-300">{error}</p> : null}
+      {!loading && !error && search.trim() && results.length === 0 ? (
+        <p className="mt-2 text-xs text-muted">Không có kết quả phù hợp.</p>
+      ) : null}
       <div className="mt-3 space-y-2">
         {results.map((item) => (
-          <div key={item.id} className="flex items-center gap-3 rounded-lg border border-line bg-surface p-2">
+          <div key={item.videoId} className="flex items-center gap-3 rounded-lg border border-line bg-surface p-2">
             <img src={item.thumbnail} alt={item.title} className="h-12 w-16 rounded object-cover" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">{item.title}</p>
