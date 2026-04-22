@@ -15,6 +15,7 @@ type YTPlayer = {
   getCurrentTime: () => number;
   seekTo: (seconds: number, allowSeekAhead: boolean) => void;
   loadVideoById: (args: { videoId: string; startSeconds?: number }) => void;
+  cueVideoById: (args: { videoId: string; startSeconds?: number }) => void;
 };
 
 declare global {
@@ -91,7 +92,12 @@ export function YoutubePlayer({ videoId, isPlaying, currentTime }: YoutubePlayer
     if (!player || !ready) return;
 
     if (initializedVideoRef.current !== videoId) {
-      player.loadVideoById({ videoId, startSeconds: Math.max(0, Math.floor(currentTime)) });
+      const startSeconds = Math.max(0, Math.floor(currentTime));
+      if (isPlaying) {
+        player.loadVideoById({ videoId, startSeconds });
+      } else {
+        player.cueVideoById({ videoId, startSeconds });
+      }
       initializedVideoRef.current = videoId;
       return;
     }

@@ -14,7 +14,7 @@ export const config = {
   databaseUrl: process.env.DATABASE_URL,
   redisUrl: process.env.REDIS_URL,
   youtubeApiKey: process.env.YOUTUBE_API_KEY,
-  elevenLabsApiKey: process.env.ELEVENLABS_API_KEY,
-  elevenLabsVoiceId: process.env.ELEVENLABS_VOICE_ID ?? "EXAVITQu4vr4xnSDxMaL",
-  fptAiApiKey: process.env.FPTAI_API_KEY
+  fptAiApiKey: process.env.FPTAI_API_KEY,
+  fptAiVoice: process.env.FPTAI_VOICE ?? "banmai",
+  fptAiSpeed: process.env.FPTAI_SPEED ?? "0"
 };

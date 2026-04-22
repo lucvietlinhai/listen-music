@@ -19,6 +19,7 @@ type QueueItem = {
   channel: string;
   thumbnail: string;
   addedBy: string;
+  requestMessage?: string;
 };
 
 type ChatMessage = {
@@ -53,6 +54,8 @@ const chatKey = (roomId: string) => `room:${roomId}:chat`;
 const voteKey = (roomId: string) => `room:${roomId}:vote`;
 
 const activeRooms = new Set<string>();
+const voiceLockedRooms = new Set<string>();
+const voiceResumeTimers = new Map<string, NodeJS.Timeout>();
 
 const getDefaultState = (userId: string): RoomPlaybackState => ({
   videoId: DEFAULT_VIDEO_ID,
@@ -135,22 +138,140 @@ const emitVoteState = async (io: Server, cache: CacheClient, roomId: string) => 
   });
 };
 
-const nextTrackByVote = async (io: Server, cache: CacheClient, roomId: string, fallbackUserId: string) => {
-  const prev = await loadState(cache, roomId, fallbackUserId);
-  const queue = await loadQueue(cache, roomId);
+const emitVoiceMessage = async (
+  io: Server,
+  ttsService: TtsService | undefined,
+  payload: {
+    roomId: string;
+    userId: string;
+    user: string;
+    text: string;
+    resumeAfterVoice?: boolean;
+  }
+) => {
+  const transcript = payload.text.trim().slice(0, 500);
+  if (!payload.roomId || !transcript) return;
+
+  const messageId = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+  io.to(payload.roomId).emit("voice_message_start", {
+    roomId: payload.roomId,
+    id: messageId,
+    userId: payload.userId,
+    user: payload.user,
+    text: transcript
+  });
+
+  try {
+    const synthesized = ttsService
+      ? await ttsService.synthesize({ roomId: payload.roomId, text: transcript })
+      : {
+          provider: "mock" as const,
+          transcript,
+          audioUrl: null,
+          cacheHit: false
+        };
+
+    io.to(payload.roomId).emit("voice_message_done", {
+      roomId: payload.roomId,
+      id: messageId,
+      text: synthesized.transcript,
+      audioUrl: synthesized.audioUrl,
+      provider: synthesized.provider,
+      cacheHit: synthesized.cacheHit,
+      fallbackWebSpeech: !synthesized.audioUrl,
+      resumeAfterVoice: Boolean(payload.resumeAfterVoice)
+    });
+  } catch (error) {
+    io.to(payload.roomId).emit("voice_message_done", {
+      roomId: payload.roomId,
+      id: messageId,
+      text: transcript,
+      audioUrl: null,
+      provider: "mock",
+      cacheHit: false,
+      fallbackWebSpeech: true,
+      resumeAfterVoice: Boolean(payload.resumeAfterVoice),
+      error: error instanceof Error ? error.message : "VOICE_SYNTHESIS_FAILED"
+    });
+  }
+};
+
+const moveToNextTrack = async (
+  io: Server,
+  cache: CacheClient,
+  ttsService: TtsService | undefined,
+  payload: {
+    roomId: string;
+    fallbackUserId: string;
+    actor: { userId: string; name: string };
+    action: "next" | "vote_skip";
+    clearVotes?: boolean;
+  }
+) => {
+  const prev = await loadState(cache, payload.roomId, payload.fallbackUserId);
+  const queue = await loadQueue(cache, payload.roomId);
   const [nextTrack, ...rest] = queue;
+  const message = nextTrack?.requestMessage?.trim();
+  const shouldReadMessageFirst = Boolean(message);
+  const existingTimer = voiceResumeTimers.get(payload.roomId);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+    voiceResumeTimers.delete(payload.roomId);
+  }
+  if (shouldReadMessageFirst) {
+    voiceLockedRooms.add(payload.roomId);
+  } else {
+    voiceLockedRooms.delete(payload.roomId);
+  }
 
   const nextState: RoomPlaybackState = {
     ...prev,
     videoId: nextTrack?.videoId ?? prev.videoId,
     currentTime: 0,
     updatedAt: Date.now(),
-    isPlaying: true
+    isPlaying: !shouldReadMessageFirst
   };
 
-  await Promise.all([saveQueue(cache, roomId, rest), saveState(cache, roomId, nextState), saveVotes(cache, roomId, [])]);
-  io.to(roomId).emit("player:state", { roomId, state: materializeState(nextState), action: "vote_skip" });
-  await Promise.all([emitQueue(io, cache, roomId), emitVoteState(io, cache, roomId)]);
+  await Promise.all([
+    saveQueue(cache, payload.roomId, rest),
+    saveState(cache, payload.roomId, nextState),
+    payload.clearVotes ? saveVotes(cache, payload.roomId, []) : Promise.resolve()
+  ]);
+  io.to(payload.roomId).emit("player:state", {
+    roomId: payload.roomId,
+    state: materializeState(nextState),
+    action: payload.action
+  });
+  await emitQueue(io, cache, payload.roomId);
+  if (payload.clearVotes) {
+    await emitVoteState(io, cache, payload.roomId);
+  }
+
+  if (shouldReadMessageFirst && message) {
+    await emitVoiceMessage(io, ttsService, {
+      roomId: payload.roomId,
+      userId: payload.actor.userId,
+      user: payload.actor.name,
+      text: message,
+      resumeAfterVoice: true
+    });
+  }
+};
+
+const nextTrackByVote = async (
+  io: Server,
+  cache: CacheClient,
+  ttsService: TtsService | undefined,
+  roomId: string,
+  fallbackUserId: string
+) => {
+  await moveToNextTrack(io, cache, ttsService, {
+    roomId,
+    fallbackUserId,
+    actor: { userId: fallbackUserId, name: "system" },
+    action: "vote_skip",
+    clearVotes: true
+  });
 };
 
 const ensureHost = async (
@@ -278,6 +399,14 @@ export const registerRoomSync = (io: Server, cache: CacheClient, ttsService?: Tt
       const updatedMembers = members.filter((member) => member !== auth.userId);
       await saveMembers(cache, roomId, updatedMembers);
       await ensureHost(io, cache, roomId, auth.userId);
+      if (updatedMembers.length === 0) {
+        voiceLockedRooms.delete(roomId);
+        const resumeTimer = voiceResumeTimers.get(roomId);
+        if (resumeTimer) {
+          clearTimeout(resumeTimer);
+          voiceResumeTimers.delete(roomId);
+        }
+      }
       socket.to(roomId).emit("room:member_left", {
         roomId,
         userId: auth.userId,
@@ -289,6 +418,10 @@ export const registerRoomSync = (io: Server, cache: CacheClient, ttsService?: Tt
     socket.on(
       "player:play",
       async ({ roomId, currentTime }: { roomId: string; currentTime: number }) => {
+        if (voiceLockedRooms.has(roomId)) {
+          emitAuthError(socket, "VOICE_IN_PROGRESS");
+          return;
+        }
         const auth = (socket.data as SocketData).auth;
         const prev = await loadState(cache, roomId, auth.userId);
         if (!isHost(auth, prev)) {
@@ -353,30 +486,63 @@ export const registerRoomSync = (io: Server, cache: CacheClient, ttsService?: Tt
         return;
       }
 
-      const queue = await loadQueue(cache, roomId);
-      const [nextTrack, ...rest] = queue;
-      await saveQueue(cache, roomId, rest);
-      const nextState: RoomPlaybackState = {
-        ...prev,
-        videoId: nextTrack?.videoId ?? prev.videoId,
-        currentTime: 0,
-        updatedAt: Date.now(),
-        isPlaying: true
-      };
-      await saveState(cache, roomId, nextState);
-      io.to(roomId).emit("player:state", { roomId, state: materializeState(nextState), action: "next" });
-      await emitQueue(io, cache, roomId);
+      await moveToNextTrack(io, cache, ttsService, {
+        roomId,
+        fallbackUserId: auth.userId,
+        actor: { userId: auth.userId, name: auth.name },
+        action: "next"
+      });
     });
 
     socket.on("queue:add", async ({ roomId, item }: { roomId: string; item: Omit<QueueItem, "addedBy"> }) => {
       const auth = (socket.data as SocketData).auth;
       const queue = await loadQueue(cache, roomId);
+      const requestMessage =
+        typeof item.requestMessage === "string" ? item.requestMessage.trim().slice(0, 220) : undefined;
       queue.push({
         ...item,
-        addedBy: auth.userId
+        addedBy: auth.userId,
+        requestMessage
       });
       await saveQueue(cache, roomId, queue);
       await emitQueue(io, cache, roomId);
+    });
+
+    socket.on("voice:finished", async ({ roomId }: { roomId: string }) => {
+      const auth = (socket.data as SocketData).auth;
+      if (!roomId || !voiceLockedRooms.has(roomId)) return;
+
+      const prev = await loadState(cache, roomId, auth.userId);
+      if (!isHost(auth, prev)) {
+        emitAuthError(socket, "HOST_ONLY_CONTROL");
+        return;
+      }
+
+      const existingTimer = voiceResumeTimers.get(roomId);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+      }
+
+      const timer = setTimeout(async () => {
+        voiceResumeTimers.delete(roomId);
+        if (!voiceLockedRooms.has(roomId)) return;
+        voiceLockedRooms.delete(roomId);
+
+        const latest = await loadState(cache, roomId, auth.userId);
+        const nextState: RoomPlaybackState = {
+          ...latest,
+          isPlaying: true,
+          updatedAt: Date.now()
+        };
+        await saveState(cache, roomId, nextState);
+        io.to(roomId).emit("player:state", {
+          roomId,
+          state: materializeState(nextState),
+          action: "play_after_voice"
+        });
+      }, 1_000);
+
+      voiceResumeTimers.set(roomId, timer);
     });
 
     socket.on("chat:send", async ({ roomId, content }: { roomId: string; content: string }) => {
@@ -424,7 +590,7 @@ export const registerRoomSync = (io: Server, cache: CacheClient, ttsService?: Tt
       await emitVoteState(io, cache, roomId);
       const threshold = Math.max(1, Math.ceil(members.length * SKIP_THRESHOLD));
       if (voters.length >= threshold) {
-        await nextTrackByVote(io, cache, roomId, auth.userId);
+        await nextTrackByVote(io, cache, ttsService, roomId, auth.userId);
       }
     });
 
@@ -446,49 +612,13 @@ export const registerRoomSync = (io: Server, cache: CacheClient, ttsService?: Tt
 
     socket.on("voice:request", async ({ roomId, text }: { roomId: string; text: string }) => {
       const auth = (socket.data as SocketData).auth;
-      const transcript = text.trim().slice(0, 500);
-      if (!roomId || !transcript) return;
-
-      const messageId = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-      io.to(roomId).emit("voice_message_start", {
+      await emitVoiceMessage(io, ttsService, {
         roomId,
-        id: messageId,
         userId: auth.userId,
         user: auth.name,
-        text: transcript
+        text,
+        resumeAfterVoice: false
       });
-
-      try {
-        const synthesized = ttsService
-          ? await ttsService.synthesize({ roomId, text: transcript })
-          : {
-              provider: "mock" as const,
-              transcript,
-              audioUrl: null,
-              cacheHit: false
-            };
-
-        io.to(roomId).emit("voice_message_done", {
-          roomId,
-          id: messageId,
-          text: synthesized.transcript,
-          audioUrl: synthesized.audioUrl,
-          provider: synthesized.provider,
-          cacheHit: synthesized.cacheHit,
-          fallbackWebSpeech: !synthesized.audioUrl
-        });
-      } catch (error) {
-        io.to(roomId).emit("voice_message_done", {
-          roomId,
-          id: messageId,
-          text: transcript,
-          audioUrl: null,
-          provider: "mock",
-          cacheHit: false,
-          fallbackWebSpeech: true,
-          error: error instanceof Error ? error.message : "VOICE_SYNTHESIS_FAILED"
-        });
-      }
     });
 
     socket.on("disconnect", async () => {
@@ -500,6 +630,14 @@ export const registerRoomSync = (io: Server, cache: CacheClient, ttsService?: Tt
       const updatedMembers = members.filter((member) => member !== auth.userId);
       await saveMembers(cache, roomId, updatedMembers);
       await ensureHost(io, cache, roomId, auth.userId);
+      if (updatedMembers.length === 0) {
+        voiceLockedRooms.delete(roomId);
+        const resumeTimer = voiceResumeTimers.get(roomId);
+        if (resumeTimer) {
+          clearTimeout(resumeTimer);
+          voiceResumeTimers.delete(roomId);
+        }
+      }
       socket.to(roomId).emit("room:member_left", {
         roomId,
         userId: auth.userId,

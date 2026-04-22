@@ -18,6 +18,7 @@ type QueueItem = {
   title: string;
   channel: string;
   thumbnail: string;
+  requestMessage?: string;
 };
 
 type SearchResultItem = {
@@ -123,6 +124,43 @@ const decodeJwtPayload = (token: string): { userId?: string } | null => {
   }
 };
 
+const speakVietnamese = (text: string) =>
+  new Promise<void>((resolve) => {
+    if (!("speechSynthesis" in window)) {
+      resolve();
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    const voices = window.speechSynthesis.getVoices();
+    const viVoices = voices.filter((voice) => voice.lang.toLowerCase().startsWith("vi"));
+    const preferredFemale = viVoices.find((voice) =>
+      /(female|woman|nu|linh|mai|chi|vy|vbee|google)/i.test(`${voice.name} ${voice.voiceURI}`)
+    );
+    const preferred = preferredFemale ?? viVoices[0];
+    if (preferred) {
+      utter.voice = preferred;
+      utter.lang = preferred.lang;
+    } else {
+      utter.lang = "vi-VN";
+    }
+    utter.rate = 1;
+    utter.pitch = preferredFemale ? 1.15 : 1.05;
+    utter.onend = () => resolve();
+    utter.onerror = () => resolve();
+    window.speechSynthesis.speak(utter);
+  });
+
+const playAudioUrl = (url: string) =>
+  new Promise<void>((resolve, reject) => {
+    const audio = new Audio(url);
+    audio.onended = () => resolve();
+    audio.onerror = () => reject(new Error("AUDIO_PLAYBACK_FAILED"));
+    void audio.play().catch((error) => {
+      reject(error);
+    });
+  });
+
 export default function RoomPage({ params }: RoomPageProps) {
   const { user, requestLogin } = useAuth();
 
@@ -132,6 +170,8 @@ export default function RoomPage({ params }: RoomPageProps) {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [orderMessage, setOrderMessage] = useState("");
+  const [lastOrderMessage, setLastOrderMessage] = useState("");
   const [urlLoading, setUrlLoading] = useState(false);
   const [sheet, setSheet] = useState<"queue" | "members" | null>(null);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -161,6 +201,7 @@ export default function RoomPage({ params }: RoomPageProps) {
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const displayTimeRef = useRef(84);
+  const hostIdRef = useRef("");
   const totalMembers = Math.max(onlineCount, 1);
   const role = user ? "host" : "guest";
   const canControlPlayer = playback.hostId === currentUserId || !playback.hostId;
@@ -212,6 +253,10 @@ export default function RoomPage({ params }: RoomPageProps) {
   useEffect(() => {
     displayTimeRef.current = displayTime;
   }, [displayTime]);
+
+  useEffect(() => {
+    hostIdRef.current = playback.hostId;
+  }, [playback.hostId]);
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
@@ -354,23 +399,38 @@ export default function RoomPage({ params }: RoomPageProps) {
 
         socket.on(
           "voice_message_done",
-          (payload: { text: string; audioUrl: string | null; provider: string; fallbackWebSpeech: boolean }) => {
+          (payload: {
+            text: string;
+            audioUrl: string | null;
+            provider: string;
+            fallbackWebSpeech: boolean;
+            resumeAfterVoice?: boolean;
+            error?: string;
+          }) => {
             if (!mounted) return;
-            if (payload.audioUrl) {
-              const audio = new Audio(payload.audioUrl);
-              void audio.play().catch(() => {
-                if ("speechSynthesis" in window) {
-                  const utter = new SpeechSynthesisUtterance(payload.text);
-                  utter.lang = "vi-VN";
-                  window.speechSynthesis.speak(utter);
-                }
+            const shouldResumePlayback =
+              Boolean(payload.resumeAfterVoice) && Boolean(decoded?.userId) && decoded?.userId === hostIdRef.current;
+
+            const playbackPromise = payload.audioUrl
+              ? playAudioUrl(payload.audioUrl).catch(() => speakVietnamese(payload.text))
+              : payload.fallbackWebSpeech
+                ? speakVietnamese(payload.text)
+                : Promise.resolve();
+
+            if (shouldResumePlayback) {
+              void playbackPromise.finally(() => {
+                socket.emit("voice:finished", { roomId: params.id });
               });
-            } else if (payload.fallbackWebSpeech && "speechSynthesis" in window) {
-              const utter = new SpeechSynthesisUtterance(payload.text);
-              utter.lang = "vi-VN";
-              window.speechSynthesis.speak(utter);
             }
-            pushToast(`Voice ready (${payload.provider})`, "ðŸ“»");
+            if (payload.provider === "mock") {
+              pushToast("Voice fallback trình duyệt (mock)", "⚠️");
+              if (payload.error) {
+                console.warn("voice provider error", payload.error);
+                pushToast(`FPT AI lỗi: ${payload.error.slice(0, 60)}`, "⚠️");
+              }
+              return;
+            }
+            pushToast(`Voice ready (${payload.provider})`, "📻");
           }
         );
       } catch {
@@ -464,9 +524,10 @@ export default function RoomPage({ params }: RoomPageProps) {
     pushToast("Đã copy link phòng", "✅");
   };
 
-  const handleAddSong = (item: SearchResultItem) => {
+  const handleAddSong = (item: SearchResultItem, requestMessageInput?: string) => {
     requireLogin("Đăng nhập để thêm bài vào hàng đợi.", () => {
       const nextItem = { ...item, id: `${item.videoId}-${Date.now()}` };
+      const message = (requestMessageInput ?? orderMessage).trim().slice(0, 220);
       socketRef.current?.emit("queue:add", {
         roomId: params.id,
         item: {
@@ -474,9 +535,18 @@ export default function RoomPage({ params }: RoomPageProps) {
           videoId: nextItem.videoId,
           title: nextItem.title,
           channel: nextItem.channel,
-          thumbnail: nextItem.thumbnail
+          thumbnail: nextItem.thumbnail,
+          requestMessage: message || undefined
         }
       });
+      if (message) {
+        setLastOrderMessage(message);
+        /* socketRef.current?.emit("voice:request", {
+          roomId: params.id,
+          text: `Lời nhắn cho bài ${item.title}: ${message}`
+        }); */
+      }
+      setOrderMessage("");
       pushToast(`Đã thêm "${item.title}" vào hàng đợi`, "🎵");
     });
   };
@@ -565,16 +635,125 @@ export default function RoomPage({ params }: RoomPageProps) {
     });
   };
 
+  /* legacy voice handlers removed (kept only for temporary source-encoding cleanup)
   const handleVoiceRequest = () => {
     const socket = socketRef.current;
     if (!socket) {
-      pushToast("Socket chÆ°a káº¿t ná»‘i", "âš ï¸");
+      pushToast("Socket chưa kết nối", "⚠️");
       return;
     }
     socket.emit("voice:request", {
       roomId: params.id,
       text: "Má»™t lá»i nháº¯n áº©n danh: ChÃºc báº¡n tá»‘i nay tháº­t bÃ¬nh yÃªn vÃ  ngá»§ tháº­t ngon."
     });
+  };
+
+  const handleVoiceRequestVi = () => {
+    const socket = socketRef.current;
+    if (!socket) {
+      pushToast("Socket chưa kết nối", "⚠️");
+      return;
+    }
+    socket.emit("voice:request", {
+      roomId: params.id,
+      text: "Một lời nhắn ẩn danh: Chúc bạn tối nay thật bình yên và ngủ thật ngon."
+    });
+  };
+
+  const handlePlayRealVoiceMessage = () => {
+    const socket = socketRef.current;
+    if (!socket) {
+      pushToast("Socket chưa kết nối", "⚠️");
+      return;
+    }
+
+    const typed = orderMessage.trim();
+    const queued = [...queue]
+      .reverse()
+      .find((item) => item.requestMessage?.trim())
+      ?.requestMessage?.trim();
+    const text = typed || queued || lastOrderMessage;
+    if (!text) {
+      pushToast("Chưa có lời nhắn thật để phát. Hãy nhập lời nhắn khi order bài.", "ℹ️");
+      return;
+    }
+
+    socket.emit("voice:request", {
+      roomId: params.id,
+      text
+    });
+    pushToast("Đã gửi yêu cầu phát lời nhắn thật", "📻");
+  };
+
+  const handlePlayRealVoiceMessageV2 = () => {
+    const socket = socketRef.current;
+    if (!socket) {
+      pushToast("Socket chưa kết nối", "⚠️");
+      return;
+    }
+
+    const typed = orderMessage.trim();
+    const queued = [...queue]
+      .reverse()
+      .find((item) => item.requestMessage?.trim())
+      ?.requestMessage?.trim();
+    const text = typed || queued || lastOrderMessage;
+    if (!text) {
+      pushToast("Chưa có lời nhắn thật để phát. Hãy nhập lời nhắn khi order bài.", "ℹ️");
+      return;
+    }
+
+    socket.emit("voice:request", {
+      roomId: params.id,
+      text
+    });
+    pushToast("Đã gửi yêu cầu phát lời nhắn thật", "📻");
+  };
+
+  };
+  const handlePlayRealFptVoice = () => {
+    const socket = socketRef.current;
+    if (!socket) {
+      pushToast("Socket chưa kết nối", "⚠️");
+      return;
+    }
+
+    const typed = orderMessage.trim();
+    const queued = [...queue]
+      .reverse()
+      .find((item) => item.requestMessage?.trim())
+      ?.requestMessage?.trim();
+    const text = typed || queued || lastOrderMessage;
+    if (!text) {
+      pushToast("Chưa có lời nhắn để phát. Hãy nhập lời nhắn khi order bài.", "ℹ️");
+      return;
+    }
+
+    socket.emit("voice:request", { roomId: params.id, text });
+    pushToast("Đã gửi phát lời nhắn với FPT AI", "📻");
+  };
+  */
+
+  const handlePlayRealFptVoiceClean = () => {
+    const socket = socketRef.current;
+    if (!socket) {
+      pushToast("Socket chưa kết nối", "⚠️");
+      return;
+    }
+
+    const typed = orderMessage.trim();
+    const queued = [...queue]
+      .reverse()
+      .find((item) => item.requestMessage?.trim())
+      ?.requestMessage?.trim();
+    const text = typed || queued || lastOrderMessage;
+    if (!text) {
+      pushToast("Chưa có lời nhắn để phát. Hãy nhập lời nhắn khi order bài.", "ℹ️");
+      return;
+    }
+
+    socket.emit("voice:request", { roomId: params.id, text });
+    pushToast("Đã gửi phát lời nhắn với FPT AI", "📻");
   };
 
   return (
@@ -628,6 +807,8 @@ export default function RoomPage({ params }: RoomPageProps) {
                   error={searchError}
                   youtubeUrl={youtubeUrl}
                   setYoutubeUrl={setYoutubeUrl}
+                  orderMessage={orderMessage}
+                  setOrderMessage={setOrderMessage}
                   urlLoading={urlLoading}
                   onAddFromUrl={handleAddFromUrl}
                   onAdd={handleAddSong}
@@ -698,10 +879,10 @@ export default function RoomPage({ params }: RoomPageProps) {
                       Next
                     </button>
                     <button
-                      onClick={handleVoiceRequest}
+                      onClick={handlePlayRealFptVoiceClean}
                       className="rounded-lg bg-accent-soft px-3 py-2 text-sm font-semibold text-accent"
                     >
-                      Demo lời nhắn AI
+                      Nghe lời nhắn (FPT AI)
                     </button>
                   </div>
 
@@ -775,6 +956,8 @@ export default function RoomPage({ params }: RoomPageProps) {
                     error={searchError}
                     youtubeUrl={youtubeUrl}
                     setYoutubeUrl={setYoutubeUrl}
+                    orderMessage={orderMessage}
+                    setOrderMessage={setOrderMessage}
                     urlLoading={urlLoading}
                     onAddFromUrl={handleAddFromUrl}
                     onAdd={handleAddSong}
@@ -832,6 +1015,8 @@ export default function RoomPage({ params }: RoomPageProps) {
                   error={searchError}
                   youtubeUrl={youtubeUrl}
                   setYoutubeUrl={setYoutubeUrl}
+                  orderMessage={orderMessage}
+                  setOrderMessage={setOrderMessage}
                   urlLoading={urlLoading}
                   onAddFromUrl={handleAddFromUrl}
                   onAdd={handleAddSong}
@@ -889,6 +1074,8 @@ function SearchPanel({
   error,
   youtubeUrl,
   setYoutubeUrl,
+  orderMessage,
+  setOrderMessage,
   urlLoading,
   onAddFromUrl,
   onAdd
@@ -900,9 +1087,11 @@ function SearchPanel({
   error: string;
   youtubeUrl: string;
   setYoutubeUrl: (value: string) => void;
+  orderMessage: string;
+  setOrderMessage: (value: string) => void;
   urlLoading: boolean;
   onAddFromUrl: () => void;
-  onAdd: (item: SearchResultItem) => void;
+  onAdd: (item: SearchResultItem, requestMessageInput?: string) => void;
 }) {
   return (
     <div>
@@ -929,6 +1118,12 @@ function SearchPanel({
         </button>
       </div>
       {loading ? <p className="mt-2 text-xs text-muted">Đang tìm kiếm...</p> : null}
+      <input
+        value={orderMessage}
+        onChange={(event) => setOrderMessage(event.target.value.slice(0, 220))}
+        className="mt-2 w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none ring-accent/30 transition focus:ring-2"
+        placeholder="Lời nhắn khi order (tùy chọn, tối đa 220 ký tự)"
+      />
       {!loading && error ? <p className="mt-2 text-xs text-amber-300">{error}</p> : null}
       {!loading && !error && search.trim() && results.length === 0 ? (
         <p className="mt-2 text-xs text-muted">Không có kết quả phù hợp.</p>
@@ -942,7 +1137,7 @@ function SearchPanel({
               <p className="truncate text-xs text-muted">{item.channel}</p>
             </div>
             <button
-              onClick={() => onAdd(item)}
+              onClick={() => onAdd(item, orderMessage)}
               className="rounded-md border border-line px-2 py-1 text-xs font-semibold"
             >
               Thêm
@@ -976,6 +1171,9 @@ function QueuePanel({
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold">{item.title}</p>
               <p className="truncate text-xs text-muted">{item.channel}</p>
+              {item.requestMessage ? (
+                <p className="mt-1 line-clamp-2 text-xs text-amber-200">Lời nhắn: {item.requestMessage}</p>
+              ) : null}
             </div>
             <button
               onClick={() => onRemove(item.id)}
@@ -1069,3 +1267,5 @@ function ChatPanel({
     </div>
   );
 }
+
+

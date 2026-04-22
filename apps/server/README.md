@@ -13,6 +13,14 @@ Backend API cho giai đoạn đầu (Phase 06), ưu tiên chạy local nhanh:
 2. `npm run dev:server`
 3. API base: `http://localhost:4000`
 
+## AI Voice (FPT AI)
+
+Thêm vào `apps/server/.env`:
+
+- `FPTAI_API_KEY=...`
+- `FPTAI_VOICE=banmai` (hoặc `lannhi`, `leminh`, `myan`, `thuminh`, `giahuy`, `linhsan`)
+- `FPTAI_SPEED=0` (`-3` đến `+3`)
+
 ## Prisma (khi có Supabase Postgres)
 
 1. Tạo file `.env` từ `.env.example` và điền `DATABASE_URL`
