@@ -69,7 +69,8 @@ const getAdjustedTime = (state: Pick<PlaybackState, "currentTime" | "isPlaying" 
   return Math.max(0, state.currentTime + elapsed);
 };
 
-const initialQueue: QueueItem[] = [
+const initialQueue: QueueItem[] = [];
+/*
   {
     id: "q1",
     videoId: "hLQl3WQQoQ0",
@@ -95,13 +96,16 @@ const initialQueue: QueueItem[] = [
       "https://images.unsplash.com/photo-1470229538611-16ba8c7ffbd7?auto=format&fit=crop&w=600&q=80"
   }
 ];
+*/
 
-const members: Member[] = [
+const members: Member[] = [];
+/*
   { id: "m1", name: "Huy", role: "host", avatar: "H" },
   { id: "m2", name: "Linh", role: "member", avatar: "L" },
   { id: "m3", name: "Tú", role: "member", avatar: "T" },
   { id: "m4", name: "Khách 3491", role: "guest", avatar: "K" }
 ];
+*/
 
 const initialMessages: ChatMessage[] = [
   { id: "c1", type: "system", content: "Huy đã tạo phòng." },
@@ -164,7 +168,7 @@ const playAudioUrl = (url: string) =>
 export default function RoomPage({ params }: RoomPageProps) {
   const { user, requestLogin } = useAuth();
 
-  const [queue, setQueue] = useState<QueueItem[]>(initialQueue);
+  const [queue, setQueue] = useState<QueueItem[]>([]);
   const [search, setSearch] = useState("");
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -186,25 +190,28 @@ export default function RoomPage({ params }: RoomPageProps) {
   );
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [hasError, setHasError] = useState(false);
-  const [onlineCount, setOnlineCount] = useState(members.length);
+  const [onlineCount, setOnlineCount] = useState(0);
   const [isSocketConnected, setIsSocketConnected] = useState(false);
   const [playback, setPlayback] = useState<PlaybackState>({
     videoId: "hLQl3WQQoQ0",
-    currentTime: 84,
+    currentTime: 0,
     isPlaying: false,
     updatedAt: Date.now(),
     hostId: ""
   });
   const [currentUserId, setCurrentUserId] = useState("");
-  const [displayTime, setDisplayTime] = useState(84);
+  const [displayTime, setDisplayTime] = useState(0);
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const socketRef = useRef<Socket | null>(null);
-  const displayTimeRef = useRef(84);
+  const displayTimeRef = useRef(0);
   const hostIdRef = useRef("");
   const totalMembers = Math.max(onlineCount, 1);
   const role = user ? "host" : "guest";
-  const canControlPlayer = playback.hostId === currentUserId || !playback.hostId;
+  const hasTrack = queue.length > 0;
+  const canControlPlayer = Boolean(playback.hostId) && playback.hostId === currentUserId;
+  const currentTrack = queue.find((item) => item.videoId === playback.videoId) ?? queue[0] ?? null;
+  const currentTrackPosition = currentTrack ? queue.findIndex((item) => item.id === currentTrack.id) + 1 : 0;
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -638,7 +645,6 @@ export default function RoomPage({ params }: RoomPageProps) {
   /* legacy voice handlers removed (kept only for temporary source-encoding cleanup)
   const handleVoiceRequest = () => {
     const socket = socketRef.current;
-    if (!socket) {
       pushToast("Socket chưa kết nối", "⚠️");
       return;
     }
@@ -650,7 +656,7 @@ export default function RoomPage({ params }: RoomPageProps) {
 
   const handleVoiceRequestVi = () => {
     const socket = socketRef.current;
-    if (!socket) {
+    /* if (!socket) {
       pushToast("Socket chưa kết nối", "⚠️");
       return;
     }
@@ -661,12 +667,6 @@ export default function RoomPage({ params }: RoomPageProps) {
   };
 
   const handlePlayRealVoiceMessage = () => {
-    const socket = socketRef.current;
-    if (!socket) {
-      pushToast("Socket chưa kết nối", "⚠️");
-      return;
-    }
-
     const typed = orderMessage.trim();
     const queued = [...queue]
       .reverse()
@@ -725,17 +725,34 @@ export default function RoomPage({ params }: RoomPageProps) {
       ?.requestMessage?.trim();
     const text = typed || queued || lastOrderMessage;
     if (!text) {
-      pushToast("Chưa có lời nhắn để phát. Hãy nhập lời nhắn khi order bài.", "ℹ️");
+      pushToast("Chưa có lời nhắn để đọc. Hãy nhập lời nhắn khi order bài.", "ℹ️");
       return;
     }
 
-    socket.emit("voice:request", { roomId: params.id, text });
-    pushToast("Đã gửi phát lời nhắn với FPT AI", "📻");
+    setVoiceText(text);
+    setShowVoiceOverlay(true);
+    pushToast("Đã hiển thị lại lời nhắn", "📝");
   };
   */
 
+  /*
   const handlePlayRealFptVoiceClean = () => {
-    const socket = socketRef.current;
+    const typed = orderMessage.trim();
+    const queued = [...queue]
+      .reverse()
+      .find((item) => item.requestMessage?.trim())
+      ?.requestMessage?.trim();
+    const text = typed || queued || lastOrderMessage;
+    if (!text) {
+      pushToast("Chưa có lời nhắn để đọc. Hãy nhập lời nhắn khi order bài.", "ℹ️");
+      return;
+    }
+
+    setVoiceText(text);
+    setShowVoiceOverlay(true);
+    pushToast("Đã hiển thị lại lời nhắn", "📝");
+    return;
+
     if (!socket) {
       pushToast("Socket chưa kết nối", "⚠️");
       return;
@@ -754,6 +771,24 @@ export default function RoomPage({ params }: RoomPageProps) {
 
     socket.emit("voice:request", { roomId: params.id, text });
     pushToast("Đã gửi phát lời nhắn với FPT AI", "📻");
+  };
+  */
+
+  const handlePlayRealFptVoiceClean = () => {
+    const typed = orderMessage.trim();
+    const queued = [...queue]
+      .reverse()
+      .find((item) => item.requestMessage?.trim())
+      ?.requestMessage?.trim();
+    const text = typed || queued || lastOrderMessage;
+    if (!text) {
+      pushToast("Chưa có lời nhắn để đọc. Hãy nhập lời nhắn khi order bài.", "ℹ️");
+      return;
+    }
+
+    setVoiceText(text);
+    setShowVoiceOverlay(true);
+    pushToast("Đã hiển thị lại lời nhắn", "📝");
   };
 
   return (
@@ -816,7 +851,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                 <div className="my-4 border-t border-line" />
                 <QueuePanel queue={queue} onRemove={handleRemoveSong} />
                 <div className="my-4 border-t border-line" />
-                <MembersPanel members={members} />
+                <MembersPanel members={[]} />
               </aside>
 
               <section className="space-y-4 md:col-span-1 lg:col-span-6">
@@ -828,24 +863,32 @@ export default function RoomPage({ params }: RoomPageProps) {
                       currentTime={displayTime}
                     />
                   </div>
-                  <h2 className="mt-4 text-2xl font-extrabold">Nơi Này Có Anh</h2>
-                  <p className="mt-1 text-sm text-muted">Sơn Tùng M-TP</p>
+                  <h2 className="mt-4 line-clamp-1 text-xl font-extrabold sm:text-2xl">
+                    {currentTrack?.title ?? "Chưa có bài hát mới nào được phát"}
+                  </h2>
+                  {currentTrack?.channel ? (
+                    <p className="mt-1 line-clamp-1 text-sm text-muted">{currentTrack.channel}</p>
+                  ) : null}
                   <p className="mt-1 text-xs text-muted">
                     Realtime: {isSocketConnected ? "Đã kết nối" : "Mất kết nối"}
                   </p>
                   <p className="mt-1 text-xs text-muted">
-                    Quyền điều khiển: {canControlPlayer ? "Host" : "Chỉ host mới điều khiển"}
+                    Quyền điều khiển:{" "}
+                    {playback.hostId ? (canControlPlayer ? "Host" : "Chỉ host mới điều khiển") : "Chưa có host"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted">
+                    {hasTrack ? `Hàng đợi: bài ${currentTrackPosition}/${queue.length}` : "Hàng đợi trống"}
                   </p>
 
                   <div className="mt-4 h-2 w-full rounded-full bg-surface">
                     <div
                       className="h-2 rounded-full bg-accent"
-                      style={{ width: `${Math.min((displayTime / 290) * 100, 100)}%` }}
+                      style={{ width: hasTrack ? `${Math.min((displayTime / 290) * 100, 100)}%` : "0%" }}
                     />
                   </div>
                   <div className="mt-2 flex justify-between text-xs text-muted">
                     <span>{formatSeconds(displayTime)}</span>
-                    <span>04:50</span>
+                    <span>--:--</span>
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -882,7 +925,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                       onClick={handlePlayRealFptVoiceClean}
                       className="rounded-lg bg-accent-soft px-3 py-2 text-sm font-semibold text-accent"
                     >
-                      Nghe lời nhắn (FPT AI)
+                      Đọc lời nhắn
                     </button>
                   </div>
 
@@ -1025,7 +1068,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                 <QueuePanel queue={queue} onRemove={handleRemoveSong} />
               </>
             ) : (
-              <MembersPanel members={members} />
+              <MembersPanel members={[]} />
             )}
           </div>
         </div>

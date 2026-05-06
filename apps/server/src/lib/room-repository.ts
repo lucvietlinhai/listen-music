@@ -21,26 +21,6 @@ class MemoryRoomRepository implements RoomRepository {
   readonly mode = "memory" as const;
   private readonly rooms = new Map<string, Room>();
 
-  constructor() {
-    const seeds: Room[] = [
-      {
-        id: "night-vibes",
-        name: "Dem Cham Rai",
-        hostId: "seed-host-1",
-        isPublic: true,
-        createdAt: new Date().toISOString()
-      },
-      {
-        id: "focus-room",
-        name: "WFH Focus Room",
-        hostId: "seed-host-2",
-        isPublic: true,
-        createdAt: new Date().toISOString()
-      }
-    ];
-    seeds.forEach((room) => this.rooms.set(room.id, room));
-  }
-
   async list(): Promise<PublicRoom[]> {
     return Array.from(this.rooms.values()).map(({ passwordHash: _passwordHash, ...room }) => room);
   }

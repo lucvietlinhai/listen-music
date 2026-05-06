@@ -114,5 +114,41 @@ export function YoutubePlayer({ videoId, isPlaying, currentTime }: YoutubePlayer
     }
   }, [videoId, currentTime, isPlaying, ready]);
 
-  return <div id={PLAYER_ID} className="h-56 w-full overflow-hidden rounded-xl sm:h-72" />;
+  return (
+    <div className="relative h-20 w-full overflow-hidden rounded-lg bg-[#0b1a2b] sm:h-[88px]">
+      <div
+        id={PLAYER_ID}
+        className="pointer-events-none absolute inset-0 z-0 overflow-hidden opacity-0"
+        aria-hidden
+      />
+
+      <div className="relative z-10 flex h-full items-center gap-3 px-4">
+        <span className={`h-2 w-2 rounded-full ${isPlaying ? "bg-emerald-300" : "bg-slate-500"}`} />
+        <div className="relative h-10 flex-1">
+          <div className="absolute inset-y-1 left-0 right-0 rounded-full bg-cyan-300/5" />
+          <div className="absolute inset-x-0 top-1/2 flex -translate-y-1/2 items-center justify-center gap-[3px]">
+            {Array.from({ length: 60 }).map((_, index) => {
+              const distance = Math.abs(index - 30);
+              const baseHeight = Math.max(4, 16 - distance * 0.28);
+              return (
+                <span
+                  key={index}
+                  className={`inline-block w-[2px] rounded-full bg-gradient-to-t from-cyan-300/85 to-sky-100 ${
+                    isPlaying ? "eq-bar" : ""
+                  }`}
+                  style={{
+                    height: `${baseHeight}px`,
+                    opacity: isPlaying ? 0.95 : 0.32,
+                    animationDelay: `${index * 0.018}s`,
+                    animationDuration: `${0.72 + (index % 7) * 0.05}s`
+                  }}
+                />
+              );
+            })}
+          </div>
+        </div>
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">{isPlaying ? "Live" : "Pause"}</span>
+      </div>
+    </div>
+  );
 }
