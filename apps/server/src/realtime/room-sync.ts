@@ -10,6 +10,13 @@ type RoomPlaybackState = {
   isPlaying: boolean;
   updatedAt: number;
   hostId: string;
+  nowPlaying?: {
+    videoId: string;
+    title: string;
+    channel: string;
+    thumbnail: string;
+    requestMessage?: string;
+  } | null;
 };
 
 type QueueItem = {
@@ -62,7 +69,8 @@ const getDefaultState = (userId: string): RoomPlaybackState => ({
   currentTime: 0,
   isPlaying: false,
   updatedAt: Date.now(),
-  hostId: userId
+  hostId: userId,
+  nowPlaying: null
 });
 
 const adjustTime = (state: RoomPlaybackState) => {
@@ -229,7 +237,16 @@ const moveToNextTrack = async (
     videoId: nextTrack?.videoId ?? prev.videoId,
     currentTime: 0,
     updatedAt: Date.now(),
-    isPlaying: !shouldReadMessageFirst
+    isPlaying: !shouldReadMessageFirst,
+    nowPlaying: nextTrack
+      ? {
+          videoId: nextTrack.videoId,
+          title: nextTrack.title,
+          channel: nextTrack.channel,
+          thumbnail: nextTrack.thumbnail,
+          requestMessage: nextTrack.requestMessage
+        }
+      : prev.nowPlaying ?? null
   };
 
   await Promise.all([

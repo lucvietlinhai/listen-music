@@ -61,6 +61,13 @@ type PlaybackState = {
   isPlaying: boolean;
   updatedAt: number;
   hostId: string;
+  nowPlaying?: {
+    videoId: string;
+    title: string;
+    channel: string;
+    thumbnail: string;
+    requestMessage?: string;
+  } | null;
 };
 
 const getAdjustedTime = (state: Pick<PlaybackState, "currentTime" | "isPlaying" | "updatedAt">) => {
@@ -197,7 +204,8 @@ export default function RoomPage({ params }: RoomPageProps) {
     currentTime: 0,
     isPlaying: false,
     updatedAt: Date.now(),
-    hostId: ""
+    hostId: "",
+    nowPlaying: null
   });
   const [currentUserId, setCurrentUserId] = useState("");
   const [displayTime, setDisplayTime] = useState(0);
@@ -210,8 +218,12 @@ export default function RoomPage({ params }: RoomPageProps) {
   const role = user ? "host" : "guest";
   const hasTrack = queue.length > 0;
   const canControlPlayer = Boolean(playback.hostId) && playback.hostId === currentUserId;
-  const currentTrack = queue.find((item) => item.videoId === playback.videoId) ?? queue[0] ?? null;
-  const currentTrackPosition = currentTrack ? queue.findIndex((item) => item.id === currentTrack.id) + 1 : 0;
+  const currentTrack =
+    playback.nowPlaying ??
+    queue.find((item) => item.videoId === playback.videoId) ??
+    queue[0] ??
+    null;
+  const currentTrackPosition = currentTrack ? queue.findIndex((item) => item.videoId === currentTrack.videoId) + 1 : 0;
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -518,8 +530,8 @@ export default function RoomPage({ params }: RoomPageProps) {
     payload?: Record<string, unknown>
   ) => {
     const socket = socketRef.current;
-    if (!socket) {
-      pushToast("Socket chưa kết nối", "⚠️");
+    if (!socket || !isSocketConnected) {
+      pushToast("Mất kết nối realtime, vui lòng thử lại sau.", "⚠️");
       return;
     }
     socket.emit(event, { roomId: params.id, ...payload });
@@ -533,6 +545,10 @@ export default function RoomPage({ params }: RoomPageProps) {
 
   const handleAddSong = (item: SearchResultItem, requestMessageInput?: string) => {
     requireLogin("Đăng nhập để thêm bài vào hàng đợi.", () => {
+      if (!socketRef.current || !isSocketConnected) {
+        pushToast("Mất kết nối realtime, vui lòng thử lại sau.", "⚠️");
+        return;
+      }
       const nextItem = { ...item, id: `${item.videoId}-${Date.now()}` };
       const message = (requestMessageInput ?? orderMessage).trim().slice(0, 220);
       socketRef.current?.emit("queue:add", {
@@ -560,6 +576,10 @@ export default function RoomPage({ params }: RoomPageProps) {
 
   const handleAddFromUrl = () => {
     requireLogin("Đăng nhập để thêm bài từ URL YouTube.", () => {
+      if (!socketRef.current || !isSocketConnected) {
+        pushToast("Mất kết nối realtime, vui lòng thử lại sau.", "⚠️");
+        return;
+      }
       const raw = youtubeUrl.trim();
       if (!raw) return;
 
@@ -584,6 +604,10 @@ export default function RoomPage({ params }: RoomPageProps) {
   };
 
   const handleRemoveSong = (id: string) => {
+    if (!socketRef.current || !isSocketConnected) {
+      pushToast("Mất kết nối realtime, vui lòng thử lại sau.", "⚠️");
+      return;
+    }
     socketRef.current?.emit("queue:remove", { roomId: params.id, id });
     pushToast("Đã gửi yêu cầu xóa bài khỏi hàng đợi", "🗑️");
   };
@@ -622,6 +646,10 @@ export default function RoomPage({ params }: RoomPageProps) {
   const handleSendChatSocket = (event: FormEvent) => {
     event.preventDefault();
     requireLogin("Đăng nhập để gửi tin nhắn trong phòng.", () => {
+      if (!socketRef.current || !isSocketConnected) {
+        pushToast("Mất kết nối realtime, vui lòng thử lại sau.", "⚠️");
+        return;
+      }
       const trimmed = chatInput.trim();
       if (!trimmed) return;
       socketRef.current?.emit("chat:send", { roomId: params.id, content: trimmed });
@@ -631,6 +659,10 @@ export default function RoomPage({ params }: RoomPageProps) {
 
   const handleReactionSocket = (emoji: string) => {
     requireLogin("Đăng nhập để thả cảm xúc cùng mọi người.", () => {
+      if (!socketRef.current || !isSocketConnected) {
+        pushToast("Mất kết nối realtime, vui lòng thử lại sau.", "⚠️");
+        return;
+      }
       socketRef.current?.emit("reaction:send", { roomId: params.id, emoji });
     });
   };
@@ -638,6 +670,10 @@ export default function RoomPage({ params }: RoomPageProps) {
   const handleVoteSocket = () => {
     if (hasVoted) return;
     requireLogin("Đăng nhập để bỏ phiếu skip bài hát.", () => {
+      if (!socketRef.current || !isSocketConnected) {
+        pushToast("Mất kết nối realtime, vui lòng thử lại sau.", "⚠️");
+        return;
+      }
       socketRef.current?.emit("vote:cast", { roomId: params.id });
     });
   };
