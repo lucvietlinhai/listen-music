@@ -137,6 +137,23 @@ export const fetchRooms = async () => {
   return json.rooms;
 };
 
+export const fetchMyRoom = async () => {
+  const token = await getAuthToken();
+  const response = await fetch(`${API_BASE_URL}/api/rooms/my`, {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    }
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error("Khong the tai phong cua toi");
+  }
+
+  const json = (await response.json()) as ApiRoom;
+  return json;
+};
+
 export const createRoom = async (payload: CreateRoomPayload) => {
   const sendCreate = async (token: string) =>
     fetch(`${API_BASE_URL}/api/rooms`, {

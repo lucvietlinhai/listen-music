@@ -47,54 +47,56 @@ export function Hero() {
   ];
 
   return (
-    <section className="mx-auto grid w-full max-w-6xl gap-8 px-4 pb-16 pt-14 md:grid-cols-2 md:items-center md:pt-20">
+    <section className="mx-auto grid w-full gap-10 px-6 pb-20 pt-20 md:grid-cols-2 md:items-center md:pt-32 lg:px-12 xl:gap-20">
       <div>
-        <p className="mb-3 inline-flex rounded-full border border-accent-soft bg-accent-soft/40 px-3 py-1 text-xs font-semibold tracking-wide text-accent">
-          Radio lời nhắn ẩn danh AI
+        <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-accent/20 bg-accent/10 px-4 py-1.5 text-[11px] font-bold uppercase tracking-widest text-accent">
+          <span className="h-1.5 w-1.5 rounded-full bg-accent animate-pulse"></span>
+          AI Anonymous Radio
         </p>
-        <h1 className="text-4xl font-extrabold leading-tight text-text sm:text-5xl">
-          Cùng nghe một bài nhạc, <span className="text-gradient">cùng một khoảnh khắc</span>
+        <h1 className="text-5xl font-extrabold tracking-tight text-text lg:text-7xl">
+          Listen together, <br/> <span className="text-accent">in sync.</span>
         </h1>
-        <p className="mt-5 max-w-xl text-base leading-relaxed text-muted sm:text-lg">
-          Tạo phòng trong vài giây, mời bạn bè bằng một đường link, chat và thả cảm xúc theo thời
-          gian thực. Không cần cài app.
+        <p className="mt-6 max-w-xl text-lg leading-relaxed text-muted">
+          Create a room in seconds, invite friends with a link, chat and react in real-time. Experience music together, no app required.
         </p>
-        <div className="mt-7 flex flex-wrap gap-3">
+        <div className="mt-8 flex flex-wrap gap-4">
           <Link
             href="/rooms?create=1"
-            className="rounded-xl bg-accent px-5 py-3 text-sm font-bold text-slate-950 transition hover:brightness-110"
+            className="btn-primary px-8 py-3.5 text-base"
           >
-            Tạo phòng ngay
+            Create Room
           </Link>
           <Link
             href="/rooms"
-            className="rounded-xl border border-line bg-surface px-5 py-3 text-sm font-semibold text-text transition hover:border-accent"
+            className="btn-ghost border border-white/[0.08] px-8 py-3.5 text-base"
           >
-            Tham gia phòng
+            Explore Rooms
           </Link>
         </div>
       </div>
 
-      <div className="glass float-up rounded-2xl p-5 shadow-glow">
-        <div className="rounded-xl border border-line bg-card p-4">
-          <p className="text-sm font-semibold text-muted">Đang phát</p>
-          <p className="mt-2 text-lg font-bold text-text">Nơi này có anh</p>
-          <p className="text-sm text-muted">Sơn Tùng M-TP</p>
-          <div className="mt-4 h-2 w-full rounded-full bg-surface">
-            <div className="h-2 w-1/3 rounded-full bg-accent" />
+      <div className="glass rounded-2xl p-6 shadow-glass-lg transition-all duration-500 hover:shadow-glow-teal-strong">
+        <div className="glass-subtle rounded-xl p-5">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Now Playing</p>
+          <p className="mt-2 text-xl font-bold text-text">Nơi này có anh</p>
+          <p className="text-sm font-semibold text-accent">Sơn Tùng M-TP</p>
+          <div className="progress-bar-track mt-5">
+            <div className="progress-bar-fill w-1/3" />
           </div>
         </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
           {liveCards.map((item) => (
-            <div key={item.label} className="rounded-xl border border-line bg-surface p-4">
-              <p className="text-2xl font-extrabold text-success">{item.value}</p>
-              <p className="mt-1 text-sm text-muted">{item.label}</p>
+            <div key={item.label} className="glass-subtle rounded-xl p-5">
+              <p className="text-3xl font-extrabold text-text tracking-tight">{item.value}</p>
+              <p className="mt-1 text-[10px] font-bold uppercase tracking-widest text-muted">{item.label}</p>
             </div>
           ))}
         </div>
-        <p className="mt-3 text-xs text-muted">
-          Tổng số phòng đã tạo: <span className="font-semibold text-text">{formatNumber(stats.roomsTotal)}</span>
-        </p>
+        <div className="mt-5 text-center">
+          <p className="text-[11px] font-semibold text-muted">
+            Total rooms created: <span className="text-accent">{formatNumber(stats.roomsTotal)}</span>
+          </p>
+        </div>
       </div>
     </section>
   );

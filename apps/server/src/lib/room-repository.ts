@@ -13,6 +13,7 @@ type RoomRepository = {
   mode: "memory" | "prisma";
   list: () => Promise<PublicRoom[]>;
   get: (id: string) => Promise<PublicRoom | null>;
+  getByHostId: (hostId: string) => Promise<PublicRoom | null>;
   create: (input: CreateRoomInput) => Promise<PublicRoom>;
   remove: (id: string) => Promise<boolean>;
 };
@@ -27,6 +28,13 @@ class MemoryRoomRepository implements RoomRepository {
 
   async get(id: string): Promise<PublicRoom | null> {
     const room = this.rooms.get(id);
+    if (!room) return null;
+    const { passwordHash: _passwordHash, ...publicRoom } = room;
+    return publicRoom;
+  }
+
+  async getByHostId(hostId: string): Promise<PublicRoom | null> {
+    const room = Array.from(this.rooms.values()).find(r => r.hostId === hostId);
     if (!room) return null;
     const { passwordHash: _passwordHash, ...publicRoom } = room;
     return publicRoom;
@@ -95,6 +103,29 @@ class PrismaRoomRepository implements RoomRepository {
     } catch (error) {
       console.error("roomRepository.get fallback to memory", error);
       return memoryRepo.get(id);
+    }
+  }
+
+  async getByHostId(hostId: string): Promise<PublicRoom | null> {
+    const prisma = getPrismaClient();
+    if (!prisma) return memoryRepo.getByHostId(hostId);
+
+    try {
+      const row = await prisma.room.findFirst({
+        where: { hostId },
+        orderBy: { createdAt: 'desc' }
+      });
+      if (!row) return null;
+      return {
+        id: row.id,
+        name: row.name,
+        hostId: row.hostId,
+        isPublic: row.isPublic,
+        createdAt: row.createdAt.toISOString()
+      };
+    } catch (error) {
+      console.error("roomRepository.getByHostId fallback to memory", error);
+      return memoryRepo.getByHostId(hostId);
     }
   }
 

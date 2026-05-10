@@ -26,44 +26,45 @@ export function JoinPrivateModal({ open, roomName, onClose, onSubmit }: JoinPriv
   };
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/65 p-4">
-      <div role="dialog" aria-modal="true" className="w-full max-w-sm rounded-2xl border border-line bg-card p-5">
-        <div className="mb-3 flex items-start justify-between">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+      <div role="dialog" aria-modal="true" className="glass w-full max-w-sm rounded-2xl p-6 shadow-glass animate-slide-up">
+        <div className="mb-6 flex items-start justify-between">
           <div>
-            <p className="text-sm text-muted">Phòng riêng tư</p>
-            <h2 className="text-lg font-extrabold">{roomName}</h2>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-warning">Private Room</p>
+            <h2 className="mt-1 text-lg font-bold tracking-tight text-text">{roomName}</h2>
           </div>
           <button
             onClick={onClose}
-            aria-label="Đóng modal tham gia phòng"
-            className="text-sm text-muted transition hover:text-text"
+            aria-label="Close modal"
+            className="btn-ghost px-2 py-1 text-xs"
           >
-            Đóng
+            ✕
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-5">
           <div className="space-y-2">
-            <label htmlFor="join-password" className="text-sm font-medium text-muted">
-              Nhập mật khẩu để tham gia
+            <label htmlFor="join-password" className="text-xs font-semibold uppercase tracking-widest text-muted">
+              Enter Password
             </label>
             <input
               id="join-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              aria-label="Mật khẩu tham gia phòng riêng tư"
-              className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm outline-none ring-accent/30 transition focus:ring-2"
-              placeholder="Mật khẩu"
+              aria-label="Room Password"
+              type="password"
+              className="glass-input w-full px-4 py-3"
+              placeholder="Password"
             />
           </div>
 
-          {error ? <p className="text-sm text-rose-300">{error}</p> : null}
+          {error ? <p className="text-xs font-semibold text-danger">{error}</p> : null}
 
           <button
             type="submit"
-            className="w-full rounded-lg bg-accent px-4 py-2 text-sm font-bold text-slate-950"
+            className="btn-primary w-full py-3"
           >
-            Vào phòng
+            Join Room
           </button>
         </form>
       </div>

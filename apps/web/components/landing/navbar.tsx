@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/components/auth/auth-provider";
+import { fetchMyRoom } from "@/lib/api";
 
 const navItems = [
   { label: "Cách hoạt động", href: "#how-it-works" },
@@ -14,74 +15,96 @@ const navItems = [
 export function Navbar() {
   const { user, requestLogin, logout } = useAuth();
   const [showMenu, setShowMenu] = useState(false);
+  const [myRoomId, setMyRoomId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (user) {
+      fetchMyRoom()
+        .then((room) => {
+          if (room) setMyRoomId(room.id);
+        })
+        .catch(() => {});
+    } else {
+      setMyRoomId(null);
+    }
+  }, [user]);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-line/70 bg-bg/80 backdrop-blur">
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between px-4">
-        <Link href="/" className="text-lg font-extrabold tracking-tight">
+    <header className="glass sticky top-0 z-40 border-b border-white/[0.05]">
+      <div className="mx-auto flex h-16 w-full items-center justify-between px-6 lg:px-12">
+        <Link href="/" className="text-xl font-bold tracking-tight text-text">
           Listen<span className="text-accent">WithMe</span>
         </Link>
 
-        <nav className="hidden items-center gap-7 text-sm text-muted md:flex">
+        <nav className="hidden items-center gap-8 text-[11px] font-bold uppercase tracking-widest text-muted md:flex">
           {navItems.map((item) =>
             item.href.startsWith("/") ? (
-              <Link key={item.label} href={item.href} className="transition hover:text-text">
+              <Link key={item.label} href={item.href} className="transition-colors hover:text-accent">
                 {item.label}
               </Link>
             ) : (
-              <a key={item.label} href={item.href} className="transition hover:text-text">
+              <a key={item.label} href={item.href} className="transition-colors hover:text-accent">
                 {item.label}
               </a>
             )
           )}
         </nav>
 
-        <div className="hidden items-center gap-2 md:flex">
+        <div className="hidden items-center gap-4 md:flex">
           {!user ? (
             <button
               onClick={() =>
                 requestLogin({ message: "Đăng nhập để chat, reaction và tạo phòng của riêng bạn." })
               }
-              className="rounded-lg border border-line px-3 py-2 text-sm font-medium text-text transition hover:bg-surface"
+              className="btn-ghost px-4 py-2 text-xs"
             >
-              Đăng nhập
+              Sign In
             </button>
           ) : (
             <div className="relative">
               <button
                 onClick={() => setShowMenu((prev) => !prev)}
-                className="flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm"
+                className="glass-subtle flex items-center gap-2 rounded-lg px-3 py-1.5 transition-colors hover:border-white/10"
               >
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-accent-soft text-xs font-bold text-accent">
+                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-accent text-xs font-bold text-black">
                   {user.avatar}
                 </span>
-                {user.name}
+                <span className="text-xs font-bold text-text">{user.name}</span>
               </button>
               {showMenu ? (
-                <div className="absolute right-0 mt-2 w-44 rounded-lg border border-line bg-card p-2 text-sm">
-                  <Link href="/profile" className="block rounded-md px-2 py-2 hover:bg-surface">
-                    Hồ sơ
+                <div className="absolute right-0 mt-3 w-48 rounded-xl border border-white/[0.05] bg-[#050505] p-2 shadow-glass-lg animate-slide-up">
+                  <Link href="/profile" className="block rounded-lg px-3 py-2 text-sm text-text transition-colors hover:bg-white/[0.05]">
+                    Profile
                   </Link>
                   <button
                     onClick={logout}
-                    className="mt-1 block w-full rounded-md px-2 py-2 text-left hover:bg-surface"
+                    className="mt-1 block w-full rounded-lg px-3 py-2 text-left text-sm text-danger transition-colors hover:bg-danger/10"
                   >
-                    Đăng xuất
+                    Logout
                   </button>
                 </div>
               ) : null}
             </div>
           )}
-          <Link
-            href="/rooms?create=1"
-            className="rounded-lg bg-accent px-3 py-2 text-sm font-semibold text-slate-950 transition hover:brightness-110"
-          >
-            Tạo phòng
-          </Link>
+          {myRoomId ? (
+            <Link
+              href={`/room/${myRoomId}`}
+              className="btn-primary px-5 py-2 text-xs bg-emerald-500 hover:bg-emerald-400 shadow-glow-strong"
+            >
+              Phòng của tôi
+            </Link>
+          ) : (
+            <Link
+              href="/rooms?create=1"
+              className="btn-primary px-5 py-2 text-xs"
+            >
+              Create Room
+            </Link>
+          )}
         </div>
 
         <button
-          className="inline-flex rounded-md border border-line px-3 py-2 text-sm md:hidden"
+          className="btn-ghost inline-flex px-3 py-2 text-xs md:hidden"
           aria-label="Mở menu"
         >
           Menu

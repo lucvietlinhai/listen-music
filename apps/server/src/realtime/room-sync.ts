@@ -2,6 +2,7 @@ import type { Server, Socket } from "socket.io";
 import type { CacheClient } from "../lib/cache";
 import type { TtsService } from "../lib/tts-service";
 import { verifyToken } from "../lib/auth";
+import { roomRepository } from "../lib/room-repository";
 import type { AuthTokenPayload } from "../types";
 
 type RoomPlaybackState = {
@@ -10,6 +11,8 @@ type RoomPlaybackState = {
   isPlaying: boolean;
   updatedAt: number;
   hostId: string;
+  hostName?: string;
+  hostEmail?: string;
   nowPlaying?: {
     videoId: string;
     title: string;
@@ -64,12 +67,14 @@ const activeRooms = new Set<string>();
 const voiceLockedRooms = new Set<string>();
 const voiceResumeTimers = new Map<string, NodeJS.Timeout>();
 
-const getDefaultState = (userId: string): RoomPlaybackState => ({
+const getDefaultState = (userId: string, userName: string, userEmail?: string): RoomPlaybackState => ({
   videoId: DEFAULT_VIDEO_ID,
   currentTime: 0,
   isPlaying: false,
   updatedAt: Date.now(),
   hostId: userId,
+  hostName: userName,
+  hostEmail: userEmail,
   nowPlaying: null
 });
 
@@ -92,11 +97,21 @@ const saveMembers = async (cache: CacheClient, roomId: string, members: string[]
   await cache.set(membersKey(roomId), members, 86400);
 };
 
-const loadState = async (cache: CacheClient, roomId: string, userId: string) => {
+const loadState = async (cache: CacheClient, roomId: string, userId: string, userName?: string, userEmail?: string) => {
   const existing = await cache.get<RoomPlaybackState>(stateKey(roomId));
   if (existing) return existing;
 
-  const initial = getDefaultState(userId);
+  let hostId = userId;
+  try {
+    const room = await roomRepository.get(roomId);
+    if (room) {
+      hostId = room.hostId;
+    }
+  } catch (err) {
+    console.error("Failed to fetch room from db in loadState", err);
+  }
+
+  const initial = getDefaultState(hostId, userName || "Chủ phòng", userEmail);
   await cache.set(stateKey(roomId), initial, 86400);
   return initial;
 };
@@ -124,6 +139,13 @@ const loadVotes = async (cache: CacheClient, roomId: string) =>
 
 const saveVotes = async (cache: CacheClient, roomId: string, voters: string[]) => {
   await cache.set(voteKey(roomId), voters, 86400);
+};
+
+const loadMemberInfos = async (cache: CacheClient, roomId: string) =>
+  (await cache.get<Record<string, { name: string; email?: string }>>(infosKey(roomId))) ?? {};
+
+const saveMemberInfos = async (cache: CacheClient, roomId: string, infos: Record<string, { name: string; email?: string }>) => {
+  await cache.set(infosKey(roomId), infos, 86400);
 };
 
 const emitQueue = async (io: Server, cache: CacheClient, roomId: string) => {
@@ -306,13 +328,8 @@ const ensureHost = async (
   }
 
   if (!members.includes(state.hostId)) {
-    const nextState: RoomPlaybackState = {
-      ...state,
-      hostId: members[0],
-      updatedAt: Date.now()
-    };
-    await saveState(cache, roomId, nextState);
-    io.to(roomId).emit("room:host_changed", { roomId, hostId: nextState.hostId });
+    // We intentionally removed host transfer logic here. 
+    // Host is permanently tied to the creator.
   }
 };
 
@@ -373,13 +390,19 @@ export const registerRoomSync = (io: Server, cache: CacheClient, ttsService?: Tt
       (socket.data as SocketData).roomId = roomId;
       activeRooms.add(roomId);
 
-      const members = await loadMembers(cache, roomId);
+      const [members, infos] = await Promise.all([
+        loadMembers(cache, roomId),
+        loadMemberInfos(cache, roomId)
+      ]);
       if (!members.includes(auth.userId)) {
         members.push(auth.userId);
         await saveMembers(cache, roomId, members);
       }
+      
+      infos[auth.userId] = { name: auth.name, email: auth.email };
+      await saveMemberInfos(cache, roomId, infos);
 
-      const state = await loadState(cache, roomId, auth.userId);
+      const state = await loadState(cache, roomId, auth.userId, auth.name, auth.email);
       const [queue, chat, voters] = await Promise.all([
         loadQueue(cache, roomId),
         loadChat(cache, roomId),
@@ -581,6 +604,41 @@ export const registerRoomSync = (io: Server, cache: CacheClient, ttsService?: Tt
       io.to(roomId).emit("chat:message", { roomId, message });
     });
 
+    socket.on("room:chat:reaction", async ({ roomId, messageId, emoji, action }: { roomId: string; messageId: string, emoji: string, action: "add" | "remove" }) => {
+      const auth = (socket.data as SocketData).auth;
+      const chat = await loadChat(cache, roomId);
+      const msgIndex = chat.findIndex((m) => m.id === messageId);
+      
+      if (msgIndex !== -1) {
+        if (!chat[msgIndex].reactions) {
+          chat[msgIndex].reactions = {};
+        }
+        
+        // Ensure single reaction per user across all emojis for this message
+        for (const existingEmoji of Object.keys(chat[msgIndex].reactions!)) {
+          chat[msgIndex].reactions![existingEmoji] = chat[msgIndex].reactions![existingEmoji].filter(id => id !== auth.userId);
+        }
+
+        if (!chat[msgIndex].reactions![emoji]) chat[msgIndex].reactions![emoji] = [];
+        
+        if (action === "add") {
+          chat[msgIndex].reactions![emoji].push(auth.userId);
+        }
+
+        // Cleanup empty arrays
+        for (const existingEmoji of Object.keys(chat[msgIndex].reactions!)) {
+          if (chat[msgIndex].reactions![existingEmoji].length === 0) {
+            delete chat[msgIndex].reactions![existingEmoji];
+          }
+        }
+        
+        await saveChat(cache, roomId, chat);
+        const payload = { roomId, messageId, reactions: chat[msgIndex].reactions };
+        socket.to(roomId).emit("room:chat_reaction_updated", payload);
+        socket.emit("room:chat_reaction_updated", payload);
+      }
+    });
+
     socket.on("reaction:send", ({ roomId, emoji }: { roomId: string; emoji: string }) => {
       const auth = (socket.data as SocketData).auth;
       const value = emoji.trim();
@@ -636,6 +694,29 @@ export const registerRoomSync = (io: Server, cache: CacheClient, ttsService?: Tt
         text,
         resumeAfterVoice: false
       });
+    });
+
+    socket.on("room:delete", async (payload: { roomId: string }) => {
+      const auth = (socket.data as SocketData).auth;
+      if (!payload.roomId) return;
+      const state = await loadState(cache, payload.roomId, auth.userId, auth.name, auth.email);
+      if (state.hostId !== auth.userId) return;
+
+      // Delete from DB
+      await roomRepository.remove(payload.roomId);
+      
+      // Delete from cache
+      activeRooms.delete(payload.roomId);
+      await Promise.all([
+        cache.del(stateKey(payload.roomId)),
+        cache.del(membersKey(payload.roomId)),
+        cache.del(queueKey(payload.roomId)),
+        cache.del(chatKey(payload.roomId)),
+        cache.del(voteKey(payload.roomId)),
+        cache.del(infosKey(payload.roomId))
+      ]);
+
+      io.to(payload.roomId).emit("room:deleted", { roomId: payload.roomId });
     });
 
     socket.on("disconnect", async () => {

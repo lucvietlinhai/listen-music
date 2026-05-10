@@ -9,16 +9,20 @@ const useCases = [
 
 export function UseCases() {
   return (
-    <section className="mx-auto w-full max-w-6xl px-4 py-16">
-      <h2 className="text-2xl font-extrabold sm:text-3xl">Dành cho mọi kiểu nghe nhạc</h2>
-      <p className="mt-2 text-muted">Bạn nghe một mình hay cùng hội bạn, đều có phòng phù hợp.</p>
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <section className="mx-auto w-full px-6 py-20 lg:px-12">
+      <div className="mb-12">
+        <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">For Every Listening Style</h2>
+        <p className="mt-3 text-sm text-muted max-w-2xl">
+          Whether you're working, chilling, or just need some background noise, there's a perfect space for you.
+        </p>
+      </div>
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {useCases.map((item) => (
           <article
             key={item.title}
-            className="rounded-2xl border border-line bg-card p-5 transition hover:-translate-y-0.5 hover:border-accent/70"
+            className="glass rounded-2xl p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-glow-teal"
           >
-            <h3 className="text-lg font-bold">{item.title}</h3>
+            <h3 className="text-lg font-bold tracking-tight text-text">{item.title}</h3>
             <p className="mt-2 text-sm leading-relaxed text-muted">{item.desc}</p>
           </article>
         ))}

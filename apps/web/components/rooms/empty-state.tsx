@@ -4,17 +4,19 @@ type EmptyStateProps = {
 
 export function EmptyState({ onCreateRoom }: EmptyStateProps) {
   return (
-    <div className="rounded-2xl border border-dashed border-line bg-card p-8 text-center">
-      <p className="text-3xl">🎧</p>
-      <h2 className="mt-3 text-xl font-bold">Chưa có phòng nào đang mở</h2>
-      <p className="mt-2 text-sm text-muted">
-        Hãy tạo phòng đầu tiên và mời bạn bè vào nghe nhạc cùng bạn.
+    <div className="glass-subtle flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/[0.08] px-6 py-16 text-center">
+      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-soft text-3xl">
+        🎧
+      </div>
+      <h2 className="mt-5 text-xl font-bold tracking-tight text-text">No active rooms found</h2>
+      <p className="mt-2 max-w-sm text-sm text-muted">
+        Create the first room and invite your colleagues to listen together.
       </p>
       <button
         onClick={onCreateRoom}
-        className="mt-5 rounded-lg bg-accent px-4 py-2 text-sm font-bold text-slate-950"
+        className="btn-primary mt-6 px-6"
       >
-        Tạo phòng ngay
+        + Create Room
       </button>
     </div>
   );

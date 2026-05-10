@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Plus } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-provider";
 import { ErrorState } from "@/components/common/error-state";
 import { CreateRoomModal } from "@/components/rooms/create-room-modal";
@@ -110,25 +111,32 @@ export default function RoomsPage() {
 
   return (
     <>
-      <main className="min-h-screen bg-bg">
-        <header className="border-b border-line/70">
-          <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4">
+      <main className="min-h-screen">
+        <header className="sticky top-0 z-40 border-b border-white/[0.05] bg-black/80 backdrop-blur-md">
+          <div className="mx-auto flex w-full flex-wrap items-center justify-between gap-3 px-6 py-4 lg:px-12">
             <div>
-              <Link href="/" className="text-lg font-extrabold">
+              <Link href="/" className="text-xl font-bold tracking-tight text-text">
                 Listen<span className="text-accent">WithMe</span>
               </Link>
-              <p className="text-sm text-muted">Khám phá phòng công khai đang hoạt động</p>
+              <p className="mt-0.5 text-xs text-muted uppercase tracking-wider font-semibold">Active Rooms Gallery</p>
             </div>
             <button
               onClick={openCreateFlow}
-              className="rounded-lg bg-accent px-4 py-2 text-sm font-bold text-slate-950"
+              className="btn-primary flex items-center gap-2"
             >
-              + Tạo phòng
+              <Plus className="h-4 w-4" /> Create Room
             </button>
           </div>
         </header>
 
-        <section className="mx-auto w-full max-w-6xl px-4 py-8">
+        <section className="mx-auto w-full px-6 py-10 lg:px-12">
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold tracking-tight text-text">Explore Rooms</h1>
+            <p className="mt-2 text-sm text-muted max-w-2xl">
+              Join an active listening session or create your own space to share music with colleagues.
+            </p>
+          </div>
+
           {hasError ? (
             <ErrorState
               title="Không thể tải danh sách phòng"
@@ -138,8 +146,8 @@ export default function RoomsPage() {
           ) : null}
 
           {isLoading ? (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {Array.from({ length: 6 }).map((_, index) => (
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {Array.from({ length: 8 }).map((_, index) => (
                 <RoomCardSkeleton key={index} />
               ))}
             </div>
@@ -148,7 +156,7 @@ export default function RoomsPage() {
           {!hasError && showEmpty ? <EmptyState onCreateRoom={openCreateFlow} /> : null}
 
           {!hasError && !isLoading && !showEmpty ? (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {rooms.map((room) => (
                 <RoomCard key={room.id} room={room} onJoin={handleJoin} />
               ))}

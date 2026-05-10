@@ -19,6 +19,18 @@ roomsRouter.get("/", (_req, res) => {
     res.status(500).json({ error: "ROOM_LIST_FAILED" });
   });
 });
+roomsRouter.get("/my", authRequired, (req: RequestWithAuth, res) => {
+  void (async () => {
+    const room = await roomRepository.getByHostId(req.auth!.userId);
+    if (!room) {
+      res.status(404).json({ error: "ROOM_NOT_FOUND" });
+      return;
+    }
+    res.json(room);
+  })().catch(() => {
+    res.status(500).json({ error: "ROOM_GET_FAILED" });
+  });
+});
 
 roomsRouter.get("/:id", (req, res) => {
   void (async () => {
