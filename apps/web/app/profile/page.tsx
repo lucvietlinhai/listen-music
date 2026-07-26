@@ -22,7 +22,7 @@ export default function ProfilePage() {
             onClick={() =>
               requestLogin({ message: "Đăng nhập để xem hồ sơ và lịch sử phòng của bạn." })
             }
-            className="mt-4 rounded-lg bg-accent px-4 py-2 text-sm font-bold text-slate-950"
+            className="mt-4 rounded-lg bg-accent px-4 py-2 text-sm font-bold text-white"
           >
             Đăng nhập với Google
           </button>
@@ -68,7 +68,7 @@ export default function ProfilePage() {
           </Link>
           <button
             onClick={logout}
-            className="rounded-lg bg-accent px-3 py-2 text-sm font-bold text-slate-950"
+            className="rounded-lg bg-accent px-3 py-2 text-sm font-bold text-white"
           >
             Đăng xuất
           </button>

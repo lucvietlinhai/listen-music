@@ -2,34 +2,54 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── ZING MP3 INSPIRED MODERN DESIGN TOKENS ─── */
+/* ─── CLAYMORPHISM · SOFT PASTEL DESIGN TOKENS ─── */
 :root {
-  /* Deep Space Purple for modern music app feel */
-  --bg: #170f23;
-  --surface: #2a2139;
-  --card: #34224f;
-  
-  /* Clean Typography */
-  --text: #ffffff;
-  --muted: #a097af;
-  
-  /* Borders - very subtle, razor thin */
-  --line: rgba(255, 255, 255, 0.05);
-  
-  /* Primary Accent: Vibrant Purple/Pink */
-  --accent: #c273ff;
-  --accent-soft: rgba(194, 115, 255, 0.1);
-  --accent-glow: rgba(194, 115, 255, 0.5);
-  
-  /* System Colors */
-  --success: #1ed760; /* Spotify Green for success */
-  --danger: #ff4b4b;
-  --warning: #f59e0b;
+  /* Soft lavender/cream canvas */
+  --bg: #eae6ff;
+  --bg-2: #f3f0ff;
+  --surface: #f6f3ff;
+  --card: #ffffff;
 
-  /* Glass Properties */
-  --glass-bg: rgba(42, 33, 57, 0.5);
-  --glass-border: rgba(255, 255, 255, 0.05);
-  --glass-blur: 24px;
+  /* Typography — deep indigo ink, never pure black */
+  --text: #2c2545;
+  --muted: #8b82a8;
+
+  /* Borders — soft, low-contrast */
+  --line: rgba(124, 92, 255, 0.10);
+
+  /* Primary accent: vibrant clay purple */
+  --accent: #7c5cff;
+  --accent-strong: #6a45ff;
+  --accent-soft: rgba(124, 92, 255, 0.12);
+  --accent-glow: rgba(124, 92, 255, 0.35);
+  --accent-ink: #ffffff;
+
+  /* Pastel companions */
+  --clay-pink: #ff9ec4;
+  --clay-mint: #7fe0c4;
+  --clay-peach: #ffc59e;
+
+  /* System colors (pastel-tuned) */
+  --success: #35c88f;
+  --danger: #ff6b7d;
+  --warning: #ffb347;
+
+  /* ── Clay shadow recipe ──
+     Outer soft drop + bottom-right dark inset + top-left light inset
+     = the puffy "pressed clay" look. */
+  --clay-light: rgba(255, 255, 255, 0.9);
+  --clay-dark: rgba(124, 92, 255, 0.20);
+  --clay-drop: rgba(108, 74, 200, 0.18);
+
+  --clay-shadow:
+    8px 8px 20px var(--clay-drop),
+    -6px -6px 16px var(--clay-light);
+  --clay-shadow-inset:
+    inset 3px 3px 8px var(--clay-dark),
+    inset -3px -3px 8px var(--clay-light);
+  --clay-shadow-sm:
+    4px 4px 10px var(--clay-drop),
+    -3px -3px 8px var(--clay-light);
 }
 
 /* ─── BASE STYLES ─── */
@@ -40,140 +60,196 @@ html, body {
   padding: 0;
   background-color: var(--bg);
   color: var(--text);
-  /* A very subtle, sophisticated grain or pure black. Let's stick to pure black for the requested Flat look */
-  background-image: none; 
+  /* Soft radial pastel wash for depth */
+  background-image:
+    radial-gradient(circle at 15% 15%, rgba(255, 158, 196, 0.18), transparent 45%),
+    radial-gradient(circle at 85% 20%, rgba(127, 224, 196, 0.16), transparent 40%),
+    radial-gradient(circle at 50% 90%, rgba(124, 92, 255, 0.14), transparent 50%);
+  background-attachment: fixed;
 }
 
 body {
   min-height: 100vh;
-  /* Next.js app router default overflow prevention */
   overflow-x: hidden;
 }
 
 a { color: inherit; text-decoration: none; }
 
 /* ─── CUSTOM SCROLLBAR ─── */
-::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+::-webkit-scrollbar-thumb {
+  background: rgba(124, 92, 255, 0.25);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: rgba(124, 92, 255, 0.45); background-clip: content-box; }
 
-/* ─── FLAT/GLASS UTILITIES ─── */
+/* ─── CLAY SURFACES ─── */
 
-/* Primary Glass Panel: Used for main containers */
+/* Primary clay panel: main containers — puffy raised card */
 .glass {
-  background: var(--glass-bg);
-  border: none;
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  background: var(--card);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 32px;
+  box-shadow: var(--clay-shadow);
 }
 
-/* Subtle Glass: Used for list items, secondary containers */
+/* Subtle clay: list items, secondary containers — gentle raise */
 .glass-subtle {
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--surface);
   border: none;
-  transition: all 0.2s ease;
+  border-radius: 20px;
+  box-shadow: var(--clay-shadow-sm);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .glass-subtle:hover {
-  background: rgba(255, 255, 255, 0.04);
+  transform: translateY(-2px);
+  box-shadow: var(--clay-shadow);
 }
 
-/* Input Fields: Modern Dark Transparent, 12px font */
+/* Input fields: pressed-in clay well */
 .glass-input {
-  background: rgba(0, 0, 0, 0.16);
+  background: var(--bg-2);
   border: none;
   color: var(--text);
   transition: all 0.2s ease;
-  border-radius: 12px;
-  padding-left: 14px;
-  padding-right: 14px;
-  font-size: 12px;
+  border-radius: 16px;
+  padding-left: 16px;
+  padding-right: 16px;
+  font-size: 13px;
+  box-shadow: var(--clay-shadow-inset);
 }
+.glass-input::placeholder { color: var(--muted); }
 .glass-input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent), 0 0 12px var(--accent-glow);
   outline: none;
+  box-shadow:
+    var(--clay-shadow-inset),
+    0 0 0 2px var(--accent);
 }
 
 /* ─── BUTTONS ─── */
 
-/* Primary Button: Vibrant Purple, rounded-full, subtle glow */
+/* Primary: raised clay pill in accent */
 .btn-primary {
-  background-color: var(--accent);
-  color: #ffffff;
+  background: linear-gradient(145deg, var(--accent), var(--accent-strong));
+  color: var(--accent-ink);
   font-weight: 700;
   border: none;
-  border-radius: 9999px; /* Pill shape */
-  padding: 10px 28px;
+  border-radius: 9999px;
+  padding: 11px 28px;
   font-size: 0.875rem;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow:
+    5px 5px 14px var(--clay-drop),
+    -4px -4px 12px var(--clay-light),
+    inset 1px 1px 2px rgba(255, 255, 255, 0.35);
 }
 .btn-primary:hover {
-  background-color: #5eceda; /* Slightly lighter teal */
-  box-shadow: 0 0 15px var(--accent-glow);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow:
+    7px 7px 18px var(--clay-drop),
+    -5px -5px 14px var(--clay-light),
+    inset 1px 1px 2px rgba(255, 255, 255, 0.4);
 }
-.btn-primary:active { transform: translateY(0); }
+.btn-primary:active {
+  transform: translateY(0);
+  box-shadow: var(--clay-shadow-inset);
+}
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-  box-shadow: none;
+  transform: none;
 }
 
-/* Ghost Button: Transparent, flat, subtle hover */
+/* Ghost: soft raised neutral clay pill */
 .btn-ghost {
-  background: transparent;
-  color: var(--muted);
+  background: var(--surface);
+  color: var(--text);
   font-weight: 600;
-  border-radius: 9999px; /* Pill shape */
-  padding: 10px 24px;
+  border-radius: 9999px;
+  padding: 11px 24px;
   font-size: 0.875rem;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  border: 1px solid transparent;
+  border: none;
+  box-shadow: var(--clay-shadow-sm);
 }
 .btn-ghost:hover {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.05);
+  transform: translateY(-2px);
+  color: var(--accent);
+  box-shadow: var(--clay-shadow);
 }
-.btn-ghost:active { background: rgba(255, 255, 255, 0.02); }
+.btn-ghost:active {
+  transform: translateY(0);
+  box-shadow: var(--clay-shadow-inset);
+}
 .btn-ghost.active-state {
   color: var(--accent);
   background: var(--accent-soft);
+  box-shadow: var(--clay-shadow-inset);
+}
+
+/* Success: raised clay pill in mint/green */
+.btn-success {
+  background: linear-gradient(145deg, var(--success), #2ab87a);
+  color: #ffffff;
+  font-weight: 700;
+  border: none;
+  border-radius: 9999px;
+  padding: 11px 28px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow:
+    5px 5px 14px rgba(53, 200, 143, 0.25),
+    -4px -4px 12px var(--clay-light),
+    inset 1px 1px 2px rgba(255, 255, 255, 0.3);
+}
+.btn-success:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    7px 7px 18px rgba(53, 200, 143, 0.3),
+    -5px -5px 14px var(--clay-light),
+    inset 1px 1px 2px rgba(255, 255, 255, 0.35);
 }
 
 /* ─── PROGRESS BARS ─── */
 .progress-bar-track {
-  height: 2px; /* Very thin, elegant line */
-  background: rgba(255, 255, 255, 0.1);
+  height: 8px;
+  background: var(--bg-2);
   overflow: hidden;
   position: relative;
+  border-radius: 9999px;
+  box-shadow: var(--clay-shadow-inset);
   transition: height 0.2s ease;
 }
-.progress-bar-track:hover { height: 4px; }
+.progress-bar-track:hover { height: 10px; }
 
 .progress-bar-fill {
   height: 100%;
-  background-color: var(--accent);
+  background: linear-gradient(90deg, var(--accent), var(--clay-pink));
   position: relative;
   transition: width 0.1s linear;
-  box-shadow: 0 0 8px var(--accent-glow);
+  border-radius: 9999px;
 }
 
 /* ─── STATUS INDICATORS ─── */
 .status-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   display: inline-block;
 }
 .status-dot.connected {
-  background-color: var(--accent);
-  box-shadow: 0 0 8px var(--accent-glow);
+  background-color: var(--success);
+  box-shadow: 0 0 0 3px rgba(53, 200, 143, 0.2);
 }
 .status-dot.disconnected {
   background-color: var(--danger);
+  box-shadow: 0 0 0 3px rgba(255, 107, 125, 0.2);
 }
 
 /* ─── ANIMATIONS ─── */
@@ -192,6 +268,19 @@ a { color: inherit; text-decoration: none; }
   to   { opacity: 1; transform: translateX(0); }
 }
 
+/* Floating blob animation */
+@keyframes float {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-12px) scale(1.03); }
+}
+
+.clay-float {
+  animation: float 6s ease-in-out infinite;
+}
+.clay-float-delayed {
+  animation: float 7s ease-in-out 1.5s infinite;
+}
+
 /* Audio visualizer bars (EQ) */
 @keyframes equalizer {
   0%, 100% { transform: scaleY(0.2); }
@@ -202,43 +291,47 @@ a { color: inherit; text-decoration: none; }
   transform-origin: bottom;
   animation: equalizer 0.8s ease-in-out infinite;
   background-color: var(--accent);
+  border-radius: 9999px;
 }
 
 /* Toast entrance */
 .toast-enter {
   animation: slide-in-right 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
+
 /* ─── VOLUME SLIDER CUSTOM STYLING ─── */
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  height: 12px;
-  width: 12px;
+  height: 16px;
+  width: 16px;
   border-radius: 50%;
   background: var(--accent);
   cursor: pointer;
-  box-shadow: 0 0 10px var(--accent-glow);
+  box-shadow:
+    2px 2px 5px var(--clay-drop),
+    -2px -2px 5px var(--clay-light);
   transition: all 0.2s ease;
 }
 
 input[type="range"]::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
-  background: white;
+  transform: scale(1.15);
 }
 
 input[type="range"]::-moz-range-thumb {
-  height: 12px;
-  width: 12px;
+  height: 16px;
+  width: 16px;
   border-radius: 50%;
   background: var(--accent);
   cursor: pointer;
   border: none;
-  box-shadow: 0 0 10px var(--accent-glow);
+  box-shadow:
+    2px 2px 5px var(--clay-drop),
+    -2px -2px 5px var(--clay-light);
   transition: all 0.2s ease;
 }
 
 input[type="range"]::-moz-range-thumb:hover {
-  transform: scale(1.2);
-  background: white;
+  transform: scale(1.15);
 }
 
 input[type="range"].vertical-slider {
@@ -251,11 +344,78 @@ input[type="range"].vertical-slider {
 }
 
 input[type="range"].vertical-slider::-webkit-slider-runnable-track {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-2);
   border-radius: 9999px;
 }
 
 input[type="range"].vertical-slider::-moz-range-track {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-2);
   border-radius: 9999px;
+}
+
+/* ─── CONTAINER ─── */
+.container-clay {
+  max-width: 1152px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 1.5rem;
+  padding-right: 1.5rem;
+}
+@media (min-width: 1024px) {
+  .container-clay { padding-left: 2rem; padding-right: 2rem; }
+}
+
+/* ─── CLAY ICON BADGE ─── */
+.clay-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  box-shadow: var(--clay-shadow-sm);
+  transition: transform 0.2s ease;
+}
+.clay-icon:hover { transform: scale(1.05); }
+
+/* ─── DECORATIVE BLOBS ─── */
+.clay-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+/* ─── SUCCESS BUTTON ─── */
+.btn-success {
+  background: linear-gradient(145deg, var(--success), #2db87d);
+  color: #ffffff;
+  font-weight: 700;
+  border: none;
+  border-radius: 9999px;
+  padding: 11px 28px;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow:
+    5px 5px 14px rgba(53, 200, 143, 0.25),
+    -4px -4px 12px var(--clay-light),
+    inset 1px 1px 2px rgba(255, 255, 255, 0.3);
+}
+.btn-success:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    7px 7px 18px rgba(53, 200, 143, 0.3),
+    -5px -5px 14px var(--clay-light),
+    inset 1px 1px 2px rgba(255, 255, 255, 0.35);
+}
+
+/* ─── FLOAT ANIMATION ─── */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+.animate-float {
+  animation: float 4s ease-in-out infinite;
 }

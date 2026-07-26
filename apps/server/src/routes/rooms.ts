@@ -1,12 +1,16 @@
 import { Router } from "express";
 import { z } from "zod";
-import { roomRepository } from "../lib/room-repository";
+import { hashPassword, roomRepository } from "../lib/room-repository";
 import { authRequired, type RequestWithAuth } from "../middleware/auth";
 
 const createRoomSchema = z.object({
   name: z.string().trim().min(2).max(80),
   isPublic: z.boolean(),
   password: z.string().min(4).max(40).optional()
+});
+
+const verifyPasswordSchema = z.object({
+  password: z.string().min(1).max(40)
 });
 
 export const roomsRouter = Router();
@@ -56,7 +60,7 @@ roomsRouter.post("/", authRequired, (req: RequestWithAuth, res) => {
     const room = await roomRepository.create({
       name: parsed.data.name,
       isPublic: parsed.data.isPublic,
-      passwordHash: parsed.data.password ? `mock_hash_${parsed.data.password}` : undefined,
+      passwordHash: parsed.data.password ? hashPassword(parsed.data.password) : undefined,
       hostId: req.auth!.userId
     });
     res.status(201).json(room);
@@ -66,6 +70,29 @@ roomsRouter.post("/", authRequired, (req: RequestWithAuth, res) => {
       return;
     }
     res.status(500).json({ error: "ROOM_CREATE_FAILED" });
+  });
+});
+
+roomsRouter.post("/:id/verify-password", (req, res) => {
+  void (async () => {
+    const parsed = verifyPasswordSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "VALIDATION_ERROR", detail: parsed.error.flatten() });
+      return;
+    }
+
+    const result = await roomRepository.verifyPassword(req.params.id, parsed.data.password);
+    if (result === null) {
+      res.status(404).json({ error: "ROOM_NOT_FOUND" });
+      return;
+    }
+    if (!result) {
+      res.status(403).json({ error: "INVALID_PASSWORD" });
+      return;
+    }
+    res.json({ ok: true });
+  })().catch(() => {
+    res.status(500).json({ error: "ROOM_VERIFY_FAILED" });
   });
 });
 

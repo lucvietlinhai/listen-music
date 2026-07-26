@@ -181,6 +181,26 @@ export const createRoom = async (payload: CreateRoomPayload) => {
   return (await response.json()) as ApiRoom;
 };
 
+export const verifyRoomPassword = async (roomId: string, password: string): Promise<boolean> => {
+  const response = await fetch(`${API_BASE_URL}/api/rooms/${roomId}/verify-password`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ password })
+  });
+
+  if (response.status === 404) {
+    throw new Error("ROOM_NOT_FOUND");
+  }
+  if (!response.ok && response.status !== 403 && response.status !== 200) {
+    throw new Error("VERIFY_PASSWORD_FAILED");
+  }
+
+  const json = (await response.json()) as { ok: boolean };
+  return json.ok === true;
+};
+
 export const fetchLiveStats = async (): Promise<LiveStats> => {
   const response = await fetch(`${API_BASE_URL}/api/stats/live`, {
     headers: {

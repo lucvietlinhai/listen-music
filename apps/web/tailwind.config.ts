@@ -21,18 +21,25 @@ const config: Config = {
         warning: "var(--warning)",
       },
       boxShadow: {
-        "glow-teal": "0 0 15px var(--accent-glow)",
-        "glow-teal-strong": "0 0 25px var(--accent-glow)",
-        "glass": "0 4px 20px rgba(0, 0, 0, 0.4)",
+        /* Claymorphism: puffy outer drop + soft ambient. Aliases kept so existing
+           component classes (shadow-glow-teal, shadow-glass) inherit the clay look. */
+        "clay": "var(--clay-shadow)",
+        "clay-sm": "var(--clay-shadow-sm)",
+        "clay-inset": "var(--clay-shadow-inset)",
+        "glow-teal": "var(--clay-shadow)",
+        "glow-teal-strong": "0 12px 32px var(--accent-glow), var(--clay-shadow)",
+        "glow-strong": "0 12px 32px var(--accent-glow), var(--clay-shadow)",
+        "glass": "var(--clay-shadow)",
+        "glass-lg": "var(--clay-shadow)",
       },
       animation: {
         "fade-in": "fade-in 0.3s ease-out both",
         "slide-up": "slide-up 0.3s ease-out both",
       },
       borderRadius: {
-        /* Bringing border radii down slightly for a more 'flat/professional' look compared to the hyper-round 3xl/4xl */
-        "xl": "12px",
-        "2xl": "16px",
+        /* Clay wants generously rounded corners for that soft, moldable feel. */
+        "xl": "18px",
+        "2xl": "24px",
       }
     }
   },

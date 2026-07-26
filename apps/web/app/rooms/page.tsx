@@ -12,7 +12,7 @@ import { JoinPrivateModal } from "@/components/rooms/join-private-modal";
 import { RoomCard } from "@/components/rooms/room-card";
 import { RoomCardSkeleton } from "@/components/rooms/room-card-skeleton";
 import type { ApiRoom, Room } from "@/components/rooms/types";
-import { createRoom, fetchRooms } from "@/lib/api";
+import { createRoom, fetchRooms, verifyRoomPassword } from "@/lib/api";
 
 const defaultSongs = [
   { title: "Nơi Này Có Anh", channel: "Sơn Tùng M-TP" },
@@ -112,8 +112,8 @@ export default function RoomsPage() {
   return (
     <>
       <main className="min-h-screen">
-        <header className="sticky top-0 z-40 border-b border-white/[0.05] bg-black/80 backdrop-blur-md">
-          <div className="mx-auto flex w-full flex-wrap items-center justify-between gap-3 px-6 py-4 lg:px-12">
+        <header className="glass sticky top-0 z-40 bg-surface/80 backdrop-blur-md">
+          <div className="container-clay flex w-full flex-wrap items-center justify-between gap-3 py-4">
             <div>
               <Link href="/" className="text-xl font-bold tracking-tight text-text">
                 Listen<span className="text-accent">WithMe</span>
@@ -129,7 +129,7 @@ export default function RoomsPage() {
           </div>
         </header>
 
-        <section className="mx-auto w-full px-6 py-10 lg:px-12">
+        <section className="container-clay w-full py-10">
           <div className="mb-8">
             <h1 className="text-3xl font-bold tracking-tight text-text">Explore Rooms</h1>
             <p className="mt-2 text-sm text-muted max-w-2xl">
@@ -146,8 +146,8 @@ export default function RoomsPage() {
           ) : null}
 
           {isLoading ? (
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {Array.from({ length: 8 }).map((_, index) => (
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {Array.from({ length: 6 }).map((_, index) => (
                 <RoomCardSkeleton key={index} />
               ))}
             </div>
@@ -156,7 +156,7 @@ export default function RoomsPage() {
           {!hasError && showEmpty ? <EmptyState onCreateRoom={openCreateFlow} /> : null}
 
           {!hasError && !isLoading && !showEmpty ? (
-            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {rooms.map((room) => (
                 <RoomCard key={room.id} room={room} onJoin={handleJoin} />
               ))}
@@ -187,8 +187,13 @@ export default function RoomsPage() {
         open={Boolean(privateRoom)}
         roomName={privateRoom?.name ?? ""}
         onClose={() => setPrivateRoom(null)}
-        onSubmit={() => {
-          const nextRoomId = privateRoom?.id ?? "mock-id";
+        onSubmit={async (password) => {
+          if (!privateRoom) return;
+          const ok = await verifyRoomPassword(privateRoom.id, password);
+          if (!ok) {
+            throw new Error("WRONG_PASSWORD");
+          }
+          const nextRoomId = privateRoom.id;
           setPrivateRoom(null);
           router.push(`/room/${nextRoomId}`);
         }}

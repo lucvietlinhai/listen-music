@@ -6,27 +6,40 @@ type JoinPrivateModalProps = {
   open: boolean;
   roomName: string;
   onClose: () => void;
-  onSubmit: (password: string) => void;
+  /** Verify the password. Resolve to navigate, reject with an Error to show a message. */
+  onSubmit: (password: string) => Promise<void>;
 };
 
 export function JoinPrivateModal({ open, roomName, onClose, onSubmit }: JoinPrivateModalProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!open) return null;
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
-    if (password !== "1234") {
-      setError("Mật khẩu chưa đúng. Dùng mật khẩu mock: 1234");
+    if (!password) {
+      setError("Vui lòng nhập mật khẩu.");
       return;
     }
     setError("");
-    onSubmit(password);
+    setIsSubmitting(true);
+    try {
+      await onSubmit(password);
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message === "WRONG_PASSWORD"
+          ? "Mật khẩu chưa đúng. Vui lòng thử lại."
+          : "Không thể vào phòng. Vui lòng thử lại.";
+      setError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-text/40 backdrop-blur-sm p-4 animate-fade-in">
       <div role="dialog" aria-modal="true" className="glass w-full max-w-sm rounded-2xl p-6 shadow-glass animate-slide-up">
         <div className="mb-6 flex items-start justify-between">
           <div>
@@ -62,9 +75,10 @@ export function JoinPrivateModal({ open, roomName, onClose, onSubmit }: JoinPriv
 
           <button
             type="submit"
+            disabled={isSubmitting}
             className="btn-primary w-full py-3"
           >
-            Join Room
+            {isSubmitting ? "Đang kiểm tra..." : "Join Room"}
           </button>
         </form>
       </div>

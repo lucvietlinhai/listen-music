@@ -170,7 +170,7 @@ export function YoutubePlayer({
   const BAR_COUNT = 80;
 
   return (
-    <div className="relative w-full overflow-hidden rounded-2xl bg-[#0a0a0a]">
+    <div className="relative w-full overflow-hidden rounded-2xl bg-card">
       {/* 
         The iframe container is ALWAYS rendered at aspect-video size.
         When in wave mode, we visually collapse the outer wrapper but keep the
@@ -230,7 +230,7 @@ export function YoutubePlayer({
 
           {/* Status label */}
           <span className={`shrink-0 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${
-            isPlaying ? "bg-accent/15 text-accent" : "bg-white/[0.05] text-muted"
+            isPlaying ? "bg-accent/15 text-accent" : "bg-accent/[0.04] text-muted"
           }`}>
             {isPlaying ? "Live" : "Paused"}
           </span>

@@ -1,21 +1,35 @@
+import Link from "next/link";
+import { Music } from "lucide-react";
+
 export function Footer() {
   return (
-    <footer className="border-t border-white/[0.05] bg-black">
-      <div className="mx-auto flex w-full flex-col gap-4 px-6 py-10 sm:flex-row sm:items-center sm:justify-between lg:px-12">
-        <p className="text-[11px] font-bold uppercase tracking-widest text-muted">© 2026 ListenWithMe. <span className="text-text">In Sync, Always.</span></p>
-        <div className="flex gap-6 text-[10px] font-bold uppercase tracking-widest text-muted">
+    <footer className="border-t border-line bg-card/50 backdrop-blur-sm">
+      <div className="container-clay flex flex-col gap-6 py-10 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <span className="clay-icon !w-8 !h-8 !rounded-lg bg-accent/15">
+            <Music size={14} className="text-accent" />
+          </span>
+          <span className="text-sm font-bold text-text">
+            Listen<span className="text-accent">WithMe</span>
+          </span>
+        </div>
+
+        <div className="flex gap-6 text-xs font-bold uppercase tracking-widest text-muted">
           <a href="#how-it-works" className="transition-colors hover:text-accent">
-            How It Works
+            Cách hoạt động
           </a>
           <a href="#features" className="transition-colors hover:text-accent">
-            Features
+            Tính năng
           </a>
-          <a href="/rooms" className="transition-colors hover:text-accent">
-            Rooms
-          </a>
+          <Link href="/rooms" className="transition-colors hover:text-accent">
+            Phòng
+          </Link>
         </div>
+
+        <p className="text-xs text-muted">
+          © 2026 ListenWithMe. <span className="text-text font-semibold">In Sync, Always.</span>
+        </p>
       </div>
     </footer>
   );
 }
-

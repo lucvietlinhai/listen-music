@@ -38,6 +38,7 @@ type ChatMessage = {
   user: string;
   content: string;
   createdAt: number;
+  reactions?: Record<string, string[]>;
 };
 
 type RoomStatePayload = {
@@ -62,6 +63,7 @@ const membersKey = (roomId: string) => `room:${roomId}:members`;
 const queueKey = (roomId: string) => `room:${roomId}:queue`;
 const chatKey = (roomId: string) => `room:${roomId}:chat`;
 const voteKey = (roomId: string) => `room:${roomId}:vote`;
+const infosKey = (roomId: string) => `room:${roomId}:infos`;
 
 const activeRooms = new Set<string>();
 const voiceLockedRooms = new Set<string>();

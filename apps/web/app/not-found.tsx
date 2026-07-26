@@ -11,7 +11,7 @@ export default function NotFoundPage() {
         </p>
         <Link
           href="/"
-          className="mt-5 inline-flex rounded-lg bg-accent px-4 py-2 text-sm font-bold text-slate-950"
+          className="mt-5 inline-flex rounded-lg bg-accent px-4 py-2 text-sm font-bold text-white"
         >
           Về trang chủ
         </Link>

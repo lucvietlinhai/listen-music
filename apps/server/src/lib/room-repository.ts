@@ -16,7 +16,15 @@ type RoomRepository = {
   getByHostId: (hostId: string) => Promise<PublicRoom | null>;
   create: (input: CreateRoomInput) => Promise<PublicRoom>;
   remove: (id: string) => Promise<boolean>;
+  /**
+   * Verify a room password.
+   * Returns null if the room does not exist, true if the password matches
+   * (or the room has no password set), false otherwise.
+   */
+  verifyPassword: (id: string, password: string) => Promise<boolean | null>;
 };
+
+export const hashPassword = (password: string) => `mock_hash_${password}`;
 
 class MemoryRoomRepository implements RoomRepository {
   readonly mode = "memory" as const;
@@ -57,6 +65,13 @@ class MemoryRoomRepository implements RoomRepository {
 
   async remove(id: string): Promise<boolean> {
     return this.rooms.delete(id);
+  }
+
+  async verifyPassword(id: string, password: string): Promise<boolean | null> {
+    const room = this.rooms.get(id);
+    if (!room) return null;
+    if (!room.passwordHash) return true;
+    return room.passwordHash === hashPassword(password);
   }
 }
 
@@ -168,6 +183,21 @@ class PrismaRoomRepository implements RoomRepository {
     } catch (error) {
       console.error("roomRepository.remove fallback to memory", error);
       return memoryRepo.remove(id);
+    }
+  }
+
+  async verifyPassword(id: string, password: string): Promise<boolean | null> {
+    const prisma = getPrismaClient();
+    if (!prisma) return memoryRepo.verifyPassword(id, password);
+
+    try {
+      const row = await prisma.room.findUnique({ where: { id } });
+      if (!row) return null;
+      if (!row.passwordHash) return true;
+      return row.passwordHash === hashPassword(password);
+    } catch (error) {
+      console.error("roomRepository.verifyPassword fallback to memory", error);
+      return memoryRepo.verifyPassword(id, password);
     }
   }
 }

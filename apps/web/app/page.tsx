@@ -9,12 +9,13 @@ export default function HomePage() {
   return (
     <main>
       <Navbar />
-      <Hero />
-      <UseCases />
-      <HowItWorks />
-      <Features />
+      <div className="container-clay">
+        <Hero />
+        <HowItWorks />
+        <Features />
+        <UseCases />
+      </div>
       <Footer />
     </main>
   );
 }
-

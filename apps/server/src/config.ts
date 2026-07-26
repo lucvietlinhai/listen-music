@@ -16,5 +16,8 @@ export const config = {
   youtubeApiKey: process.env.YOUTUBE_API_KEY,
   fptAiApiKey: process.env.FPTAI_API_KEY,
   fptAiVoice: process.env.FPTAI_VOICE ?? "banmai",
-  fptAiSpeed: process.env.FPTAI_SPEED ?? "0"
+  fptAiSpeed: process.env.FPTAI_SPEED ?? "0",
+  // Optional: Supabase Storage for TTS audio files
+  supabaseUrl: process.env.SUPABASE_URL,
+  supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY
 };

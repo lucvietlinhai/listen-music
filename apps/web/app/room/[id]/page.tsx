@@ -448,6 +448,18 @@ export default function RoomPage({ params }: RoomPageProps) {
           setChatMessages((prev) => prev.map(msg => msg.id === payload.message.id ? payload.message : msg));
         });
 
+        socket.on(
+          "room:chat_reaction_updated",
+          (payload: { messageId: string; reactions: { [emoji: string]: string[] } }) => {
+            if (!mounted) return;
+            setChatMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === payload.messageId ? { ...msg, reactions: payload.reactions } : msg
+              )
+            );
+          }
+        );
+
         socket.on("reaction:added", (payload: { emoji: string; id: string }) => {
           if (!mounted) return;
           const left = Math.floor(Math.random() * 85);
@@ -546,7 +558,7 @@ export default function RoomPage({ params }: RoomPageProps) {
         socketRef.current = null;
       }
     };
-  }, [params.id, user]);
+  }, [params.id, router, user]);
 
   useEffect(() => {
     if (!showVoiceOverlay) {
@@ -643,10 +655,6 @@ export default function RoomPage({ params }: RoomPageProps) {
       });
       if (message) {
         setLastOrderMessage(message);
-        /* socketRef.current?.emit("voice:request", {
-          roomId: params.id,
-          text: `Lời nhắn cho bài ${item.title}: ${message}`
-        }); */
       }
       setOrderMessage("");
       pushToast(`Đã thêm "${item.title}" vào hàng đợi`, "🎵");
@@ -743,7 +751,11 @@ export default function RoomPage({ params }: RoomPageProps) {
         pushToast("Mất kết nối realtime.", "⚠️");
         return;
       }
-      socketRef.current?.emit("chat:reaction", { roomId: params.id, messageId, emoji });
+      const myId = currentUserId;
+      const message = chatMessages.find((m) => m.id === messageId);
+      const alreadyReacted = Boolean(message?.reactions?.[emoji]?.includes(myId));
+      const action = alreadyReacted ? "remove" : "add";
+      socketRef.current?.emit("room:chat:reaction", { roomId: params.id, messageId, emoji, action });
     });
   };
 
@@ -916,14 +928,14 @@ export default function RoomPage({ params }: RoomPageProps) {
   };
 
   return (
-    <div className="flex h-screen flex-col bg-[#170f23] text-white overflow-hidden">
-      <header className="glass flex-shrink-0 z-40 h-14 border-b border-white/[0.05]">
+    <div className="flex h-screen flex-col bg-surface text-text overflow-hidden">
+      <header className="glass flex-shrink-0 z-40 h-14 border-b border-line">
           <div className="mx-auto flex w-full items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-12">
             <div className="flex items-center gap-4">
               <Link href="/" className="text-xl font-bold tracking-tight text-text">
                 Listen<span className="text-accent">WithMe</span>
               </Link>
-              <span className="hidden h-5 w-px bg-white/10 sm:block" />
+              <span className="hidden h-5 w-px bg-line sm:block" />
               <h1 className="hidden text-sm font-semibold uppercase tracking-widest text-muted sm:block line-clamp-1 max-w-[200px]">{roomName}</h1>
             </div>
             <div className="flex items-center gap-3">
@@ -931,7 +943,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                 onClick={handleVoteSocket}
                 disabled={hasVoted || totalMembers < 2}
                 aria-label="Bỏ phiếu skip bài hát"
-                className={`text-[11px] font-bold flex items-center gap-1.5 ${hasVoted ? "bg-white/10 text-muted" : "bg-accent/20 text-accent hover:bg-accent/30"} px-3 py-1.5 rounded-full transition-all`}
+                className={`text-[11px] font-bold flex items-center gap-1.5 ${hasVoted ? "bg-accent/[0.04] text-muted" : "bg-accent/20 text-accent hover:bg-accent/30"} px-3 py-1.5 rounded-full transition-all`}
               >
                 {hasVoted ? <CheckCircle2 className="h-3 w-3" /> : <StepForward className="h-3 w-3" />}
                 Vote Skip ({votes}/{totalMembers})
@@ -965,10 +977,10 @@ export default function RoomPage({ params }: RoomPageProps) {
                 <div className="glass flex-1 flex flex-col rounded-2xl p-4 shadow-glass overflow-hidden">
                   <div className="flex-shrink-0 mb-4">
                     <div className="flex gap-2">
-                      <button onClick={() => setSheet("queue")} className={`btn-ghost flex items-center gap-1.5 text-[11px] px-3 py-1.5 ${sheet === "queue" ? "active-state bg-white/5" : ""}`}>
+                      <button onClick={() => setSheet("queue")} className={`btn-ghost flex items-center gap-1.5 text-[11px] px-3 py-1.5 ${sheet === "queue" ? "active-state bg-accent/[0.04]" : ""}`}>
                         <ListMusic className="h-3.5 w-3.5" /> Hàng đợi
                       </button>
-                      <button onClick={() => setSheet("members")} className={`btn-ghost flex items-center gap-1.5 text-[11px] px-3 py-1.5 ${sheet === "members" ? "active-state bg-white/5" : ""}`}>
+                      <button onClick={() => setSheet("members")} className={`btn-ghost flex items-center gap-1.5 text-[11px] px-3 py-1.5 ${sheet === "members" ? "active-state bg-accent/[0.04]" : ""}`}>
                         <Users className="h-3.5 w-3.5" /> Thành viên
                       </button>
                     </div>
@@ -992,7 +1004,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                           onAdd={handleAddSong}
                         />
                       ) : (
-                        <div className="rounded-xl bg-white/[0.03] p-4 text-center">
+                        <div className="rounded-xl bg-accent/[0.04] p-4 text-center">
                           <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Muốn thêm nhạc?</p>
                           <button
                             onClick={() => requestLogin({ message: "Đăng nhập để thêm bài hát vào hàng đợi." })}
@@ -1046,7 +1058,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                       )}
                         </div>
                       ) : (
-                    <div className="flex aspect-video w-full items-center justify-center rounded-2xl bg-[#0a0a0a]">
+                    <div className="flex aspect-video w-full items-center justify-center rounded-2xl bg-card">
                       <div className="text-center">
                         <ListMusic className="mx-auto h-12 w-12 text-muted/30" />
                         <p className="mt-3 text-sm font-semibold text-muted/50">Chưa có bài hát nào đang phát</p>
@@ -1068,7 +1080,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                           <Users className="h-3 w-3" /> 
                           <span className="uppercase tracking-wider">Chủ phòng: {playback.hostId ? (playback.hostId === currentUserId ? "Bạn" : "Host") : "..."}</span>
                         </div>
-                        <div className="flex items-center gap-1.5 rounded-full bg-white/[0.05] px-2.5 py-1 text-[11px] font-bold text-muted border border-white/5">
+                        <div className="flex items-center gap-1.5 rounded-full bg-accent/[0.04] px-2.5 py-1 text-[11px] font-bold text-muted border border-line">
                           <ListMusic className="h-3 w-3" />
                           <span className="uppercase tracking-wider">{queue.length} bài trong hàng đợi</span>
                         </div>
@@ -1084,7 +1096,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                       </div>
                     </div>
                     {hasTrack ? (
-                      <span className="shrink-0 rounded-full bg-white/[0.05] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted">
+                      <span className="shrink-0 rounded-full bg-accent/[0.04] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted">
                         {currentTrackPosition}/{queue.length}
                       </span>
                     ) : null}
@@ -1110,7 +1122,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                     {/* Vertical Volume Control */}
                     <div className="relative group/volume flex items-center gap-2">
                       <div className="absolute bottom-full left-1/2 mb-4 -translate-x-1/2 opacity-0 pointer-events-none group-hover/volume:opacity-100 group-hover/volume:pointer-events-auto transition-all duration-300 transform translate-y-2 group-hover/volume:translate-y-0 z-50">
-                        <div className="glass-strong flex flex-col items-center gap-3 rounded-2xl p-3 border border-white/10 shadow-glow-strong">
+                        <div className="glass-strong flex flex-col items-center gap-3 rounded-2xl p-3 border border-line shadow-glow-strong">
                           <span className="text-[10px] font-bold text-accent">{volume}%</span>
                           <div className="h-32 w-8 relative flex justify-center">
                             <input
@@ -1123,7 +1135,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                                 setVolume(val);
                                 if (val > 0) setLastVolume(val);
                               }}
-                              className="vertical-slider w-1.5 h-32 bg-white/10 rounded-full appearance-none cursor-pointer"
+                              className="vertical-slider w-1.5 h-32 bg-accent/10 rounded-full appearance-none cursor-pointer"
                               style={{
                                 WebkitAppearance: "slider-vertical",
                                 accentColor: "var(--accent)"
@@ -1142,7 +1154,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                             setVolume(lastVolume || 100);
                           }
                         }}
-                        className="flex items-center gap-2 rounded-lg p-1.5 hover:bg-white/5 transition-all text-muted hover:text-accent"
+                        className="flex items-center gap-2 rounded-lg p-1.5 hover:bg-accent/5 transition-all text-muted hover:text-accent"
                       >
                         {volume === 0 ? <VolumeX className="h-4 w-4" /> : 
                          volume < 50 ? <Volume1 className="h-4 w-4" /> : 
@@ -1160,16 +1172,16 @@ export default function RoomPage({ params }: RoomPageProps) {
                       }
                       disabled={!canControlPlayer || !currentTrack}
                       className={`flex items-center gap-2 px-6 py-2.5 rounded-full font-bold transition-all ${
-                        playback.isPlaying 
-                          ? "bg-white/10 text-white hover:bg-white/20" 
-                          : "bg-accent text-black hover:scale-105 shadow-glow-teal"
+                        playback.isPlaying
+                          ? "bg-accent/10 text-text hover:bg-accent/20"
+                          : "bg-accent text-white hover:scale-105 shadow-glow-teal"
                       } disabled:opacity-30 disabled:hover:scale-100`}
                     >
                       {playback.isPlaying ? <Pause className="h-5 w-5 fill-current" /> : <Play className="h-5 w-5 fill-current" />}
                       <span>{playback.isPlaying ? "Tạm dừng" : "Phát nhạc"}</span>
                     </button>
 
-                    <div className="flex items-center gap-1 bg-white/[0.05] p-1 rounded-full border border-white/5">
+                    <div className="flex items-center gap-1 bg-accent/[0.04] p-1 rounded-full border border-line">
                       <button
                         onClick={() =>
                           emitPlayerEvent("player:seek", {
@@ -1177,7 +1189,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                           })
                         }
                         disabled={!canControlPlayer || !currentTrack}
-                        className="p-2.5 hover:bg-white/10 rounded-full transition-all disabled:opacity-30"
+                        className="p-2.5 hover:bg-accent/10 rounded-full transition-all disabled:opacity-30"
                         title="+10s"
                       >
                         <FastForward className="h-4 w-4" />
@@ -1185,7 +1197,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                       <button
                         onClick={() => emitPlayerEvent("player:next")}
                         disabled={!canControlPlayer || !currentTrack}
-                        className="p-2.5 hover:bg-white/10 rounded-full transition-all disabled:opacity-30"
+                        className="p-2.5 hover:bg-accent/10 rounded-full transition-all disabled:opacity-30"
                         title="Tiếp theo"
                       >
                         <StepForward className="h-4 w-4" />
@@ -1206,21 +1218,21 @@ export default function RoomPage({ params }: RoomPageProps) {
                     <button
                       onClick={() => setShowVideo(!showVideo)}
                       disabled={!currentTrack}
-                      className="btn-ghost flex items-center gap-2 px-4 py-2 text-sm rounded-full hover:bg-white/5 transition-all disabled:opacity-30"
+                      className="btn-ghost flex items-center gap-2 px-4 py-2 text-sm rounded-full hover:bg-accent/5 transition-all disabled:opacity-30"
                     >
                       {showVideo ? <AudioLines className="h-4 w-4" /> : <MonitorPlay className="h-4 w-4" />}
                       <span className="font-bold uppercase tracking-wider text-[11px]">{showVideo ? "Sóng nhạc" : "Xem Video"}</span>
                     </button>
                   </div>
 
-                  <div className="relative mt-8 rounded-[24px] bg-white/[0.03] p-1.5 border border-white/5">
+                  <div className="relative mt-8 rounded-[24px] bg-accent/[0.04] p-1.5 border border-line">
                     <div className="flex flex-wrap items-center justify-between gap-1">
                       {emojis.map((emoji) => (
                         <button
                           key={emoji}
                           onClick={() => handleReactionSocket(emoji)}
                           aria-label={`Thả cảm xúc ${emoji}`}
-                          className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-white/10 hover:scale-125 transition-all duration-200 text-xl"
+                          className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-accent/10 hover:scale-125 transition-all duration-200 text-xl"
                         >
                           {emoji}
                         </button>
@@ -1262,7 +1274,7 @@ export default function RoomPage({ params }: RoomPageProps) {
                       onAdd={handleAddSong}
                     />
                   ) : (
-                    <div className="text-center p-3 rounded-xl bg-white/5 border border-white/5">
+                    <div className="text-center p-3 rounded-xl bg-accent/[0.04] border border-line">
                       <p className="text-xs text-muted">Đăng nhập để tìm và thêm nhạc</p>
                     </div>
                   )}
@@ -1283,14 +1295,14 @@ export default function RoomPage({ params }: RoomPageProps) {
                   />
                 ) : (
                   <div className="flex flex-1 flex-col items-center justify-center text-center p-6">
-                    <div className="mb-4 rounded-full bg-white/5 p-4">
+                    <div className="mb-4 rounded-full bg-accent/[0.04] p-4">
                       <MessageSquare className="h-8 w-8 text-muted" />
                     </div>
                     <h3 className="mb-2 text-lg font-bold">Phòng chat</h3>
                     <p className="mb-6 text-sm text-muted text-balance text-[13px]">Vui lòng đăng nhập để tham gia trò chuyện cùng mọi người.</p>
                     <button
                       onClick={() => requestLogin({ message: "Đăng nhập để tham gia trò chuyện." })}
-                      className="btn-ghost w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-sm font-semibold"
+                      className="btn-ghost w-full py-2.5 rounded-xl bg-accent/[0.04] hover:bg-accent/5 text-sm font-semibold"
                     >
                       Đăng nhập để chat
                     </button>
@@ -1303,9 +1315,9 @@ export default function RoomPage({ params }: RoomPageProps) {
         </section>
 
       {sheet ? (
-        <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm p-4 lg:hidden" onClick={() => setSheet(null)}>
+        <div className="fixed inset-0 z-40 bg-surface/70 backdrop-blur-sm p-4 lg:hidden" onClick={() => setSheet(null)}>
           <div className="absolute bottom-0 left-0 right-0 max-h-[85vh] overflow-auto rounded-t-3xl glass-strong p-5" onClick={(e) => e.stopPropagation()}>
-            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-white/20" />
+            <div className="mx-auto mb-4 h-1 w-10 rounded-full bg-accent/20" />
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-lg font-bold">
                 {sheet === "queue" ? "Hàng đợi bài hát" : "Thành viên trong phòng"}
@@ -1347,7 +1359,7 @@ export default function RoomPage({ params }: RoomPageProps) {
       ) : null}
 
       {showVoiceOverlay ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 backdrop-blur-md p-4">
+        <div className="fixed inset-0 z-50 grid place-items-center bg-surface/70 backdrop-blur-md p-4">
           <div className="glass-strong w-full max-w-xl rounded-3xl p-8 text-center shadow-glow-strong animate-slide-up">
             <div className="mx-auto mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-accent">
               <span className="text-lg">📻</span>
@@ -1473,7 +1485,7 @@ function SearchPanel({
             className="btn-primary shrink-0 flex items-center gap-2 px-4 py-2 text-sm rounded-xl"
           >
             {urlLoading ? (
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-black border-t-transparent" />
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
             ) : (
               <Plus className="h-4 w-4" />
             )}
@@ -1484,7 +1496,7 @@ function SearchPanel({
 
       {/* Dropdown Results - Only show if NOT a URL */}
       {search.trim() && !isUrl && showDropdown && (
-        <div className="absolute left-0 right-0 top-[70px] z-[100] mt-1 max-h-80 overflow-y-auto rounded-2xl bg-[#1e152d] border border-white/5 p-2 shadow-2xl">
+        <div className="absolute left-0 right-0 top-[70px] z-[100] mt-1 max-h-80 overflow-y-auto rounded-2xl bg-card border border-line p-2 shadow-2xl">
           {loading ? (
             <p className="p-3 text-xs text-muted animate-pulse">Đang tìm kiếm...</p>
           ) : error ? (
@@ -1494,7 +1506,7 @@ function SearchPanel({
           ) : (
             <div className="space-y-1">
               {results.map((item) => (
-                <div key={item.videoId} className="glass-subtle flex items-center gap-3 rounded-xl p-2 transition-all hover:bg-white/[0.04] cursor-default">
+                <div key={item.videoId} className="glass-subtle flex items-center gap-3 rounded-xl p-2 transition-all hover:bg-accent/5 cursor-default">
                   <img src={item.thumbnail} alt={item.title} className="h-10 w-14 rounded-lg object-cover" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{item.title}</p>
@@ -1558,11 +1570,11 @@ function QueuePanel({
           <div
             key={item.id}
             className={`group flex items-center gap-3 rounded-xl p-2 transition-all duration-300 border ${
-              index === 0 ? "bg-white/[0.04] border-accent/30" : "bg-white/[0.01] border-white/[0.03] hover:bg-white/[0.02] hover:border-accent/20"
+              index === 0 ? "bg-accent/[0.08] border-accent/30" : "bg-accent/[0.02] border-line hover:bg-accent/5 hover:border-accent/20"
             }`}
           >
             <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-              index === 0 ? "bg-accent text-black" : "bg-white/[0.06] text-muted"
+              index === 0 ? "bg-accent text-white" : "bg-accent/[0.08] text-muted"
             }`}>
               {index + 1}
             </span>
@@ -1619,7 +1631,7 @@ function MembersPanel({
   }
 
   // Add Current User if not host
-  if (currentUser && currentUser.id !== hostId) {
+  if (currentUser && currentUser.id && currentUser.id !== hostId) {
     displayMembers.push({
       id: currentUser.id,
       name: currentUser.name || currentUser.email || "Bạn",
@@ -1644,10 +1656,10 @@ function MembersPanel({
       ) : null}
       <div className="mt-3 space-y-1.5">
         {displayMembers.map((member) => (
-          <div key={member.id} className="flex items-center justify-between rounded-xl p-2 bg-white/[0.02] border border-white/[0.03]">
+          <div key={member.id} className="flex items-center justify-between rounded-xl p-2 bg-accent/[0.02] border border-line">
             <div className="flex items-center gap-2.5 min-w-0">
               <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold border ${
-                member.role === "host" ? "bg-accent/20 text-accent border-accent/20" : "bg-white/5 text-muted border-white/10"
+                member.role === "host" ? "bg-accent/20 text-accent border-accent/20" : "bg-accent/5 text-muted border-line"
               }`}>
                 {member.avatar || "👤"}
               </span>
@@ -1694,7 +1706,7 @@ function ChatPanel({
   return (
     <div className="flex h-full flex-col">
       <h3 className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted/40 px-1">Chat phòng</h3>
-      <div className="mt-4 flex-1 space-y-6 overflow-auto rounded-[24px] bg-[#1e152d]/40 p-4 custom-scrollbar">
+      <div className="mt-4 flex-1 space-y-6 overflow-auto rounded-[24px] bg-accent/[0.04] p-4 custom-scrollbar">
         {messages.map((message) => (
           <div key={message.id} className="animate-fade-in group/msg relative">
             {message.type === "system" ? (
@@ -1711,13 +1723,13 @@ function ChatPanel({
                 </div>
                 <div className="relative inline-block max-w-[95%]">
                   <div className="relative">
-                    <p className="text-[13px] leading-relaxed text-text/90 break-words bg-white/[0.03] rounded-2xl rounded-tl-none px-4 py-2.5 shadow-sm">
+                    <p className="text-[13px] leading-relaxed text-text/90 break-words bg-accent/[0.04] rounded-2xl rounded-tl-none px-4 py-2.5 shadow-sm">
                       {message.content}
                     </p>
                     
                     {/* Reaction Bar on Hover */}
                     <div className="absolute -top-10 left-0 opacity-0 group-hover/msg:opacity-100 transition-all duration-200 pointer-events-none group-hover/msg:pointer-events-auto z-20">
-                      <div className="flex gap-1.5 bg-[#2a2139] border border-white/5 rounded-full p-1.5 shadow-glow-strong scale-75 group-hover/msg:scale-100 origin-bottom-left transition-transform">
+                      <div className="flex gap-1.5 bg-card border border-line rounded-full p-1.5 shadow-glow-strong scale-75 group-hover/msg:scale-100 origin-bottom-left transition-transform">
                         {reactionEmojis.map(emoji => (
                           <button
                             key={emoji}
@@ -1739,9 +1751,9 @@ function ChatPanel({
                           key={emoji}
                           onClick={() => onReaction(message.id, emoji)}
                           className={`flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] transition-all ${
-                            users.includes(currentUserId) 
-                              ? "bg-accent/20 text-accent" 
-                              : "bg-white/5 text-muted"
+                            users.includes(currentUserId)
+                              ? "bg-accent/20 text-accent"
+                              : "bg-accent/[0.04] text-muted"
                           }`}
                         >
                           <span className="text-xs leading-none">{emoji}</span>
@@ -1787,8 +1799,8 @@ const RoomSettingsModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="glass w-full max-w-sm rounded-2xl p-6 shadow-glow-strong animate-scale-in border border-white/10">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-text/20 backdrop-blur-sm p-4">
+      <div className="glass w-full max-w-sm rounded-2xl p-6 shadow-glow-strong animate-scale-in border border-line">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-bold text-text">Cài đặt phòng</h2>
           <button onClick={onClose} className="text-muted hover:text-text transition-colors">

@@ -6,6 +6,7 @@ import { config } from "./config";
 import { createCacheClient } from "./lib/cache";
 import { isDatabaseConfigured } from "./lib/db";
 import { roomRepository } from "./lib/room-repository";
+import { createStorageClient } from "./lib/supabase-storage";
 import { createTtsService } from "./lib/tts-service";
 import { getRealtimeStats, registerRoomSync } from "./realtime/room-sync";
 import { authOptional } from "./middleware/auth";
@@ -16,7 +17,8 @@ import { createYoutubeRouter } from "./routes/youtube";
 const app = express();
 const httpServer = createServer(app);
 const cache = createCacheClient();
-const ttsService = createTtsService(cache);
+const storage = createStorageClient();
+const ttsService = createTtsService(cache, storage);
 const io = new Server(httpServer, {
   cors: {
     origin: config.socketCorsOrigin,

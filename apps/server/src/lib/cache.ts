@@ -55,7 +55,9 @@ class RedisCache {
   }
 
   async ping(): Promise<"PONG"> {
-    await this.redis.connect();
+    // With lazyConnect, ioredis auto-connects on the first command, so we must
+    // NOT call connect() manually here — doing so throws "Redis is already
+    // connecting/connected" once a connection exists. ping() alone is enough.
     const pong = await this.redis.ping();
     return pong as "PONG";
   }

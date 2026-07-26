@@ -50,7 +50,7 @@ export function CreateRoomModal({ open, onClose, onSubmit }: CreateRoomModalProp
   };
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+    <div className="fixed inset-0 z-50 grid place-items-center bg-text/40 backdrop-blur-sm p-4 animate-fade-in">
       <div role="dialog" aria-modal="true" className="glass w-full max-w-md rounded-2xl p-6 shadow-glass animate-slide-up">
         <div className="mb-6 flex items-start justify-between">
           <h2 className="text-xl font-bold tracking-tight text-text">Create Room</h2>

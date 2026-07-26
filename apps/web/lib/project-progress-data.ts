@@ -134,18 +134,19 @@ export const phaseCards: PhaseCard[] = [
   {
     phase: "09",
     title: "AI Voice Radio",
-    status: "in_progress",
-    summary: "Da chuyen TTS sang FPT AI + event voice realtime + fallback client speech.",
+    status: "done",
+    summary: "Da hoan thanh TTS FPT AI + realtime voice events + exponential backoff + Supabase Storage.",
     completed: [
       "TTS service layer backend co cache (Redis/Memory)",
       "Ngung su dung ElevenLabs, chuyen provider TTS sang FPT AI",
       "Trigger realtime voice_message_start/voice_message_done qua Socket.IO",
-      "Room UI nhan event voice va fallback Web Speech API khi khong co audio URL"
+      "Room UI nhan event voice va fallback Web Speech API khi khong co audio URL",
+      "Upload audio TTS len Supabase Storage thay vi cache data URL (bo sung StorageClient)",
+      "Fallback data URL co size-gate (skip cache neu > 200KB) khi chua co Supabase Storage",
+      "Exponential backoff retry (500ms → 1s → 2s → 4s → 8s → 16s) cho FPT AI async poll",
+      "Structured logging: log moi attempt that bai, log ket qua cuoi (provider/cacheHit/size/elapsed)"
     ],
-    remaining: [
-      "Toi uu luu tru audio TTS len storage thay vi cache/data URL",
-      "Bo sung co che retry/backoff va observability cho FPT AI TTS"
-    ]
+    remaining: []
   },
   {
     phase: "10",

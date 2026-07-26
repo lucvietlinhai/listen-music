@@ -4,7 +4,7 @@ type EmptyStateProps = {
 
 export function EmptyState({ onCreateRoom }: EmptyStateProps) {
   return (
-    <div className="glass-subtle flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/[0.08] px-6 py-16 text-center">
+    <div className="glass-subtle flex flex-col items-center justify-center rounded-2xl border border-dashed border-line px-6 py-16 text-center">
       <div className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-soft text-3xl">
         🎧
       </div>

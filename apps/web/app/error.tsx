@@ -23,7 +23,7 @@ export default function GlobalError({
         </p>
         <button
           onClick={reset}
-          className="mt-5 inline-flex rounded-lg bg-accent px-4 py-2 text-sm font-bold text-slate-950"
+          className="mt-5 inline-flex rounded-lg bg-accent px-4 py-2 text-sm font-bold text-white"
         >
           Thử lại
         </button>

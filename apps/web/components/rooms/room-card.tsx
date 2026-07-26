@@ -10,7 +10,7 @@ export function RoomCard({ room, onJoin }: RoomCardProps) {
   return (
     <article 
       onClick={() => onJoin(room)}
-      className="glass-subtle group relative overflow-hidden rounded-[20px] p-3 transition-all duration-300 hover:-translate-y-1 hover:bg-white/[0.04] hover:shadow-glow-teal cursor-pointer"
+      className="glass-subtle group relative overflow-hidden rounded-[20px] p-3 transition-all duration-300 hover:-translate-y-1 hover:shadow-glow-teal cursor-pointer"
     >
       <div className="relative aspect-square w-full overflow-hidden rounded-2xl shadow-lg">
         <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent z-10" />
@@ -18,7 +18,7 @@ export function RoomCard({ room, onJoin }: RoomCardProps) {
         
         {/* Hover Play Button */}
         <div className="absolute bottom-4 right-4 z-20 translate-y-4 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
-          <button className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-black shadow-glow-teal hover:scale-105">
+          <button className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-white shadow-glow-teal hover:scale-105">
             <Play className="h-5 w-5 ml-1" fill="currentColor" />
           </button>
         </div>
